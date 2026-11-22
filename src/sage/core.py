@@ -5,6 +5,7 @@ It stores data in a SQLite database on the user's machine.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -405,3 +406,56 @@ class SageStore:
             "upcoming": upcoming,
             "unscheduled": unscheduled,
         }
+
+
+    def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
+        """Create a consistent SQLite backup without interrupting normal reads."""
+        target = Path(destination).expanduser().resolve()
+        source = Path(self.database).expanduser().resolve()
+        if target == source:
+            raise ValueError("Backup destination must differ from the active database.")
+        if target.exists() and not overwrite:
+            raise ValueError(f"Backup already exists: {target} (use --force to replace it).")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as source_connection:
+            destination_connection = sqlite3.connect(str(target))
+            try:
+                source_connection.backup(destination_connection)
+                destination_connection.execute("PRAGMA integrity_check")
+                result = destination_connection.execute("PRAGMA integrity_check").fetchone()
+                if not result or result[0] != "ok":
+                    raise OSError("Backup integrity check failed.")
+            finally:
+                destination_connection.close()
+        return target
+
+    def export_data(self, destination: str | Path, overwrite: bool = False) -> Path:
+        """Export all SAGE records as portable, versioned UTF-8 JSON."""
+        target = Path(destination).expanduser().resolve()
+        if target.exists() and not overwrite:
+            raise ValueError(f"Export already exists: {target} (use --force to replace it).")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tables = ("projects", "tasks", "daily_reviews", "decisions", "blockers")
+        with self._connect() as connection:
+            payload = {
+                "format": "sage-export",
+                "version": 1,
+                "exported_at": date.today().isoformat(),
+                "data": {
+                    table: [dict(row) for row in connection.execute(
+                        f"SELECT * FROM {table} ORDER BY rowid"
+                    )]
+                    for table in tables
+                },
+            }
+        temporary = target.with_name(target.name + ".tmp")
+        try:
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\\n",
+                encoding="utf-8",
+            )
+            temporary.replace(target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return target
