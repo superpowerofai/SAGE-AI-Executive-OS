@@ -87,6 +87,10 @@ def build_parser() -> argparse.ArgumentParser:
     resolve = commands.add_parser("resolve-blocker", help="Resolve an open blocker")
     resolve.add_argument("blocker_id", type=int)
 
+    serve = commands.add_parser("serve", help="Launch the local web executive cockpit")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8765)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
