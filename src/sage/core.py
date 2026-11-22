@@ -6,6 +6,7 @@ It stores data in a SQLite database on the user's machine.
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,11 @@ class SageStore:
             raise ValueError("Task title cannot be empty.")
         if not 1 <= priority <= 5:
             raise ValueError("Priority must be between 1 (highest) and 5 (lowest).")
+        if due_date is not None:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError as error:
+                raise ValueError("Due date must use YYYY-MM-DD format.") from error
         with self._connect() as connection:
             project = connection.execute(
                 "SELECT id FROM projects WHERE id = ?", (project_id,)
@@ -154,4 +160,47 @@ class SageStore:
             "open_tasks": int(open_tasks),
             "in_progress_tasks": int(in_progress),
             "completed_tasks": int(completed),
+        }
+
+
+    def execution_plan(self, days: int = 7, today: date | None = None) -> dict[str, Any]:
+        """Return overdue, upcoming and unscheduled work for active projects."""
+        if days not in {7, 30}:
+            raise ValueError("Plan horizon must be 7 or 30 days.")
+        start = today or date.today()
+        end = start + timedelta(days=days)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT tasks.*, projects.name AS project_name
+                FROM tasks
+                JOIN projects ON projects.id = tasks.project_id
+                WHERE projects.status = 'active' AND tasks.status != 'done'
+                ORDER BY CASE tasks.status WHEN 'in_progress' THEN 0 ELSE 1 END,
+                         tasks.priority ASC, tasks.due_date ASC, tasks.id ASC
+                """
+            ).fetchall()
+
+        overdue: list[dict[str, Any]] = []
+        upcoming: list[dict[str, Any]] = []
+        unscheduled: list[dict[str, Any]] = []
+        for row in rows:
+            task = dict(row)
+            due = task["due_date"]
+            if not due:
+                unscheduled.append(task)
+                continue
+            due_day = date.fromisoformat(due)
+            if due_day < start:
+                overdue.append(task)
+            elif due_day <= end:
+                upcoming.append(task)
+
+        return {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "days": days,
+            "overdue": overdue,
+            "upcoming": upcoming,
+            "unscheduled": unscheduled,
         }
