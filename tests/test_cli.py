@@ -16,8 +16,9 @@ def test_cli_project_task_and_dashboard_flow(tmp_path, capsys):
 
     assert main(["--db", database, "dashboard"]) == 0
     dashboard_output = capsys.readouterr().out
-    assert "Active Projects: 1" in dashboard_output
-    assert "Open Tasks: 1" in dashboard_output
+    assert "SAGE EXECUTIVE COCKPIT" in dashboard_output
+    assert "Portfolio: 1 active projects" in dashboard_output
+    assert "Execution: 1 open tasks" in dashboard_output
 
 
 def test_cli_can_update_task_status(tmp_path, capsys):
@@ -32,8 +33,8 @@ def test_cli_can_update_task_status(tmp_path, capsys):
 
     main(["--db", database, "dashboard"])
     dashboard_output = capsys.readouterr().out
-    assert "Open Tasks: 0" in dashboard_output
-    assert "Completed Tasks: 1" in dashboard_output
+    assert "Execution: 0 open tasks" in dashboard_output
+    assert "1 completed" in dashboard_output
 
 
 def test_cli_focus_shows_active_paused_and_one_next_action(tmp_path, capsys):
