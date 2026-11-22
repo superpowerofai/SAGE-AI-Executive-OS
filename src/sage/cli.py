@@ -91,6 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
 
+    backup = commands.add_parser("backup", help="Create a consistent SQLite backup")
+    backup.add_argument("destination", help="Backup database file path")
+    backup.add_argument("--force", action="store_true", help="Replace an existing destination")
+
+    export_json = commands.add_parser("export-json", help="Export all SAGE data as portable JSON")
+    export_json.add_argument("destination", help="JSON output file path")
+    export_json.add_argument("--force", action="store_true", help="Replace an existing destination")
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
