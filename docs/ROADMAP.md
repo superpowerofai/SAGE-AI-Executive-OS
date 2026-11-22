@@ -12,7 +12,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] CLI workflow tests
 - [x] `python -m sage` entry point
 - [x] GitHub Actions matrix for Python 3.10, 3.11 and 3.12
-- [ ] Confirm a successful clean CI run across the matrix
+- [x] Confirm a successful clean CI run across the matrix (run 45061884697)
 
 ## v0.2 — Usability
 
@@ -24,7 +24,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 ## v0.3 — Executive review
 
-- [ ] Daily review record
+- [x] Daily review record and recent review history (implemented; awaiting fresh CI run)
 - [ ] Weekly review summary
 - [ ] Blocker and dependency tracking
 - [ ] Decision journal
