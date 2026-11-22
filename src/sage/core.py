@@ -451,7 +451,7 @@ class SageStore:
         temporary = target.with_name(target.name + ".tmp")
         try:
             temporary.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\\n",
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             temporary.replace(target)
