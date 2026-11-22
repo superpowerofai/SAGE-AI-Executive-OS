@@ -47,7 +47,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("dashboard", help="Show a summary")
+    commands.add_parser("focus", help="Show active projects and one next action")
     return parser
+
+
+def _show_focus(store: SageStore) -> None:
+    projects = store.list_projects()
+    active_projects = [project for project in projects if project["status"] == "active"]
+    paused_projects = [project for project in projects if project["status"] == "paused"]
+    active_ids = {project["id"] for project in active_projects}
+
+    print("SAGE FOCUS")
+    print(f"Active projects ({len(active_projects)}):")
+    for project in active_projects:
+        print(f"  #{project['id']} {project['name']}")
+
+    print(f"Paused projects ({len(paused_projects)}):")
+    for project in paused_projects:
+        print(f"  #{project['id']} {project['name']}")
+
+    next_task = next(
+        (
+            task
+            for task in store.list_tasks()
+            if task["project_id"] in active_ids and task["status"] != "done"
+        ),
+        None,
+    )
+
+    print("ONE NEXT ACTION:")
+    if next_task is None:
+        print("  No open tasks in active projects.")
+    else:
+        print(
+            f"  #{next_task['id']} [{next_task['status']}] "
+            f"P{next_task['priority']} {next_task['title']} "
+            f"(project: {next_task['project_name']})"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
+        elif args.command == "focus":
+            _show_focus(store)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     return 0

@@ -34,3 +34,27 @@ def test_cli_can_update_task_status(tmp_path, capsys):
     dashboard_output = capsys.readouterr().out
     assert "Open Tasks: 0" in dashboard_output
     assert "Completed Tasks: 1" in dashboard_output
+
+
+def test_cli_focus_shows_active_paused_and_one_next_action(tmp_path, capsys):
+    database = str(tmp_path / "sage.db")
+    main(["--db", database, "add-project", "Active project"])
+    capsys.readouterr()
+    main(["--db", database, "add-project", "Paused project"])
+    capsys.readouterr()
+    main(["--db", database, "set-project-status", "2", "paused"])
+    capsys.readouterr()
+    main(["--db", database, "add-task", "1", "Important task", "--priority", "1"])
+    capsys.readouterr()
+    main(["--db", database, "add-task", "2", "Paused task", "--priority", "1"])
+    capsys.readouterr()
+
+    assert main(["--db", database, "focus"]) == 0
+    output = capsys.readouterr().out
+    assert "Active projects (1):" in output
+    assert "Active project" in output
+    assert "Paused projects (1):" in output
+    assert "Paused project" in output
+    assert "ONE NEXT ACTION:" in output
+    assert "Important task" in output
+    assert "Paused task" not in output
