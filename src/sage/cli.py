@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
     reviews = commands.add_parser("reviews", help="Show recent executive reviews")
     reviews.add_argument("--limit", type=int, default=7)
 
+    review_summary = commands.add_parser(
+        "review-summary", help="Summarize the last 7 or 30 days of reviews"
+    )
+    review_summary.add_argument("--days", type=int, choices=[7, 30], default=7)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -144,6 +149,26 @@ def _show_reviews(store: SageStore, limit: int) -> None:
         print(f"  Tomorrow: {review['tomorrow'] or '—'}")
 
 
+def _show_review_summary(store: SageStore, days: int) -> None:
+    summary = store.review_summary(days)
+    print(
+        f"SAGE {days}-DAY EXECUTIVE REVIEW "
+        f"({summary['start']} to {summary['end']})"
+    )
+    print(f"Days reviewed: {summary['reviewed_days']} / {days}")
+    if not summary["entries"]:
+        print("No reviews recorded in this period.")
+        return
+    for entry in summary["entries"]:
+        print(f"\\n{entry['review_date']} — Priority: {entry['priority'] or '—'}")
+        if entry["wins"]:
+            print(f"  Wins: {entry['wins']}")
+        if entry["blockers"]:
+            print(f"  Blockers: {entry['blockers']}")
+        if entry["tomorrow"]:
+            print(f"  Next move: {entry['tomorrow']}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -183,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
             _show_review(store, args)
         elif args.command == "reviews":
             _show_reviews(store, args.limit)
+        elif args.command == "review-summary":
+            _show_review_summary(store, args.days)
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
