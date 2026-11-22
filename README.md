@@ -14,6 +14,8 @@ SAGE v0.1 provides a Python command-line interface backed by SQLite. It can crea
 - View dashboard counts for active projects and task states.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
+- Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
+- Browse recent daily reviews for accountability and continuity.
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
 - Persist data in a local SQLite database.
 
@@ -106,7 +108,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 - Local single-user database; no cloud sync or hosted accounts.
 - No graphical dashboard yet.
 - No AI model or external messaging integration.
-- No recurring tasks, calendar sync, or multi-user permissions.
+- No recurring tasks, calendar sync, or multi-user permissions. Daily reviews are manually entered; SAGE does not yet infer wins or blockers from external apps.
 - Due dates are stored as supplied; advanced date validation and reminders are not implemented.
 
 ## Product principles
