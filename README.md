@@ -12,7 +12,7 @@ SAGE v0.1 provides a Python command-line interface backed by SQLite. It can crea
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
 - View dashboard counts for active projects and task states.
-- View a focus summary showing active and paused projects plus one next action from active projects.
+- View a focus summary showing active and paused projects plus one next action from active projects. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
 - Persist data in a local SQLite database.
 
 ## Requirements
