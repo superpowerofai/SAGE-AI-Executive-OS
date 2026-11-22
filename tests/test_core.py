@@ -55,3 +55,34 @@ class SageStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+def test_execution_plan_groups_overdue_upcoming_and_unscheduled_active_work(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "plan.db")
+    active = store.add_project("Active")
+    paused = store.add_project("Paused")
+    store.set_project_status(paused, "paused")
+    store.add_task(active, "Overdue", due_date="2026-11-22")
+    store.add_task(active, "Due soon", due_date="2026-11-27", priority=1)
+    store.add_task(active, "No date")
+    store.add_task(active, "Beyond horizon", due_date="2026-12-30")
+    store.add_task(paused, "Paused work", due_date="2026-11-25")
+
+    plan = store.execution_plan(7, today=date(2026, 11, 23))
+    assert [task["title"] for task in plan["overdue"]] == ["Overdue"]
+    assert [task["title"] for task in plan["upcoming"]] == ["Due soon"]
+    assert [task["title"] for task in plan["unscheduled"]] == ["No date"]
+
+
+def test_due_date_must_be_iso_format(tmp_path):
+    store = SageStore(tmp_path / "dates.db")
+    project = store.add_project("Dates")
+    try:
+        store.add_task(project, "Bad date", due_date="tomorrow")
+    except ValueError as error:
+        assert "YYYY-MM-DD" in str(error)
+    else:
+        raise AssertionError("Invalid due date should be rejected")
