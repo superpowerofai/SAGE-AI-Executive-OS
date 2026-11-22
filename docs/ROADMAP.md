@@ -25,7 +25,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 ## v0.3 — Executive review
 
 - [x] Daily review record and recent review history (implemented; awaiting fresh CI run)
-- [ ] Weekly review summary
+- [x] 7-day and 30-day review summaries (implemented; awaiting fresh CI run)
 - [ ] Blocker and dependency tracking
 - [ ] Decision journal
 
