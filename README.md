@@ -2,7 +2,7 @@
 
 **A local-first, human-in-the-loop execution system for turning projects into clear next actions.**
 
-SAGE v0.1 provides a Python command-line interface backed by SQLite. It can create and list projects, create and list tasks, update project/task statuses, and summarize execution counts. It is an early working foundation—not yet a hosted dashboard or autonomous AI agent.
+SAGE v0.1 provides a Python command-line interface and a localhost web cockpit backed by SQLite. It can create and list projects, create and list tasks, update project/task statuses, and summarize execution counts. It is an early working foundation—not yet a hosted dashboard or autonomous AI agent.
 
 ## Current capabilities
 
@@ -11,7 +11,7 @@ SAGE v0.1 provides a Python command-line interface backed by SQLite. It can crea
 - Add tasks with priority 1 (highest) through 5 (lowest).
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
-- View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.
+- View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.\n- Launch a browser-based local cockpit to create projects/tasks, update statuses, record daily reviews, and manage blockers.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
 - Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
@@ -109,7 +109,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 ## Current limitations
 
 - Local single-user database; no cloud sync or hosted accounts.
-- No graphical dashboard yet.
+- The web cockpit is intentionally local-only; it does not yet provide user accounts, remote access, or cloud sync.
 - No AI model or external messaging integration.
 - No recurring tasks, calendar sync, or multi-user permissions. Daily reviews are manually entered; SAGE does not yet infer wins or blockers from external apps.
 - Due dates are stored as supplied; advanced date validation and reminders are not implemented.
