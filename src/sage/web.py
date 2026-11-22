@@ -70,6 +70,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <form method='post' action='/add-project'><input name='name' placeholder='New project name' required><input name='description' placeholder='Description'><button>Add project</button></form></section>
 <section><h2>EXECUTION</h2><div class='scroll'><table><tr><th>ID</th><th>Task</th><th>Project</th><th>Status</th><th>Priority</th><th>Update</th></tr>{task_rows}</table></div>
 <form method='post' action='/add-task'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in active)}</select><input name='title' placeholder='Next action' required><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input type='date' name='due_date'><button>Add task</button></form></section>
+<section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
+<section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
+<form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
 <section><h2>DAILY EXECUTIVE REVIEW</h2><p>Latest: {e(latest.get('review_date','Not recorded'))} · Priority: {e(latest.get('priority','—') or '—')}</p>
 <p>Wins: {e(latest.get('wins','—') or '—')} · Tomorrow: {e(latest.get('tomorrow','—') or '—')}</p>
 <form method='post' action='/review'><input name='priority' placeholder="Today's priority"><input name='wins' placeholder='Wins'><input name='blockers' placeholder='Blockers'><input name='tomorrow' placeholder="Tomorrow's first move"><button>Save review</button></form></section>
@@ -103,7 +106,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
         def do_POST(self) -> None:
             if urlparse(self.path).path not in {
                 "/add-project", "/add-task", "/task-status", "/project-status",
-                "/review", "/add-blocker", "/resolve-blocker",
+                "/review", "/add-blocker", "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
                 return
