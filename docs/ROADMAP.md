@@ -16,6 +16,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 ## v0.2 — Usability
 
+- [x] CLI focus view for active/paused projects and one prioritized next action (CI-verified on Python 3.10, 3.11 and 3.12)
 - [ ] Interactive dashboard
 - [ ] Due-date filtering and overdue view
 - [ ] Edit and archive workflows
