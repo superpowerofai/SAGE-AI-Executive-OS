@@ -49,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan", help="Show a 7-day or 30-day execution plan")
     plan.add_argument("--days", type=int, choices=[7, 30], default=7)
 
+    review = commands.add_parser("review", help="Save or update today's executive review")
+    review.add_argument("--priority", default="")
+    review.add_argument("--wins", default="")
+    review.add_argument("--blockers", default="")
+    review.add_argument("--tomorrow", default="")
+    review.add_argument("--date", dest="review_date")
+
+    reviews = commands.add_parser("reviews", help="Show recent executive reviews")
+    reviews.add_argument("--limit", type=int, default=7)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -110,6 +120,30 @@ def _show_plan(store: SageStore, days: int) -> None:
             )
 
 
+def _show_review(store: SageStore, args: argparse.Namespace) -> None:
+    review = store.save_review(
+        priority=args.priority, wins=args.wins, blockers=args.blockers,
+        tomorrow=args.tomorrow, review_date=args.review_date,
+    )
+    print(f"SAGE DAILY EXECUTIVE REVIEW — {review['review_date']}")
+    for label, key in (("Today's priority", "priority"), ("Wins", "wins"),
+                       ("Blockers", "blockers"), ("Tomorrow's first move", "tomorrow")):
+        print(f"{label}: {review[key] or '—'}")
+
+
+def _show_reviews(store: SageStore, limit: int) -> None:
+    reviews = store.list_reviews(limit)
+    print(f"SAGE REVIEW HISTORY ({len(reviews)})")
+    if not reviews:
+        print("No daily reviews saved yet.")
+        return
+    for review in reviews:
+        print(f"\\n{review['review_date']} | Priority: {review['priority'] or '—'}")
+        print(f"  Wins: {review['wins'] or '—'}")
+        print(f"  Blockers: {review['blockers'] or '—'}")
+        print(f"  Tomorrow: {review['tomorrow'] or '—'}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -145,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Updated project #{args.project_id} to {args.status}")
         elif args.command == "plan":
             _show_plan(store, args.days)
+        elif args.command == "review":
+            _show_review(store, args)
+        elif args.command == "reviews":
+            _show_reviews(store, args.limit)
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
