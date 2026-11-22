@@ -18,7 +18,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 - [x] CLI focus view for active/paused projects and one prioritized next action (CI-verified on Python 3.10, 3.11 and 3.12)
 - [ ] Interactive dashboard
-- [ ] Due-date filtering and overdue view
+- [x] 7-day and 30-day execution plan with overdue, upcoming and unscheduled work
 - [ ] Edit and archive workflows
 - [ ] Export and backup
 
