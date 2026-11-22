@@ -46,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
         "status", choices=["active", "paused", "completed"]
     )
 
+    plan = commands.add_parser("plan", help="Show a 7-day or 30-day execution plan")
+    plan.add_argument("--days", type=int, choices=[7, 30], default=7)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -86,6 +89,27 @@ def _show_focus(store: SageStore) -> None:
         )
 
 
+def _show_plan(store: SageStore, days: int) -> None:
+    plan = store.execution_plan(days)
+    print(f"SAGE {days}-DAY EXECUTION PLAN ({plan['start']} to {plan['end']})")
+    sections = (
+        ("OVERDUE", plan["overdue"]),
+        ("UPCOMING", plan["upcoming"]),
+        ("UNSCHEDULED ACTIVE WORK", plan["unscheduled"]),
+    )
+    for label, tasks in sections:
+        print(f"\\n{label} ({len(tasks)}):")
+        if not tasks:
+            print("  Nothing here.")
+            continue
+        for task in tasks:
+            due = f" · due {task['due_date']}" if task["due_date"] else ""
+            print(
+                f"  P{task['priority']} [{task['status']}] {task['title']} "
+                f"— {task['project_name']}{due}"
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -119,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "set-project-status":
             store.set_project_status(args.project_id, args.status)
             print(f"Updated project #{args.project_id} to {args.status}")
+        elif args.command == "plan":
+            _show_plan(store, args.days)
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
