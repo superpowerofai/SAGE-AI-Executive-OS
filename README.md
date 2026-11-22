@@ -20,7 +20,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Keep a decision journal with context, chosen option, rationale, and optional revisit date.
 - Track open and resolved blockers, optionally linked to a project or task.
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
-- Persist data in a local SQLite database.
+- Persist data in a local SQLite database.\n- Create an integrity-checked SQLite backup without interrupting normal reads.\n- Export all stored records (projects, tasks, daily reviews, decisions, blockers) to versioned UTF-8 JSON.
 
 ## Requirements
 
@@ -101,7 +101,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 
 ## Architecture
 
-- `src/sage/core.py`: SQLite schema and project/task operations.
+- `src/sage/core.py`: SQLite schema, project/task operations, backup and JSON export.
 - `src/sage/cli.py`: command-line interface.
 - `src/sage/__main__.py`: `python -m sage` entry point.
 - `tests/`: configuration, core behavior and CLI workflow tests.
