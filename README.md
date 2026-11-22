@@ -18,6 +18,7 @@ SAGE v0.1 provides a Python command-line interface backed by SQLite. It can crea
 - Browse recent daily reviews for accountability and continuity.
 - Generate 7-day and 30-day executive review summaries from recorded priorities, wins, blockers, and next moves.
 - Keep a decision journal with context, chosen option, rationale, and optional revisit date.
+- Track open and resolved blockers, optionally linked to a project or task.
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
 - Persist data in a local SQLite database.
 
