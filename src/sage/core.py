@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS daily_reviews (
+    review_date TEXT PRIMARY KEY,
+    priority TEXT NOT NULL DEFAULT '',
+    wins TEXT NOT NULL DEFAULT '',
+    blockers TEXT NOT NULL DEFAULT '',
+    tomorrow TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -140,6 +149,62 @@ class SageStore:
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"Project {project_id} does not exist.")
+
+    def save_review(
+        self,
+        priority: str = "",
+        wins: str = "",
+        blockers: str = "",
+        tomorrow: str = "",
+        review_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or update one daily executive review."""
+        day = review_date or date.today().isoformat()
+        try:
+            date.fromisoformat(day)
+        except ValueError as error:
+            raise ValueError("Review date must use YYYY-MM-DD format.") from error
+        values = tuple(value.strip() for value in (priority, wins, blockers, tomorrow))
+        if not any(values):
+            raise ValueError("Add at least one review field.")
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM daily_reviews WHERE review_date = ?", (day,)
+            ).fetchone()
+            previous = dict(existing) if existing else {}
+            merged = {
+                "priority": values[0] or previous.get("priority", ""),
+                "wins": values[1] or previous.get("wins", ""),
+                "blockers": values[2] or previous.get("blockers", ""),
+                "tomorrow": values[3] or previous.get("tomorrow", ""),
+            }
+            connection.execute(
+                """INSERT INTO daily_reviews
+                   (review_date, priority, wins, blockers, tomorrow)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(review_date) DO UPDATE SET
+                     priority=excluded.priority, wins=excluded.wins,
+                     blockers=excluded.blockers, tomorrow=excluded.tomorrow,
+                     updated_at=CURRENT_TIMESTAMP""",
+                (day, merged["priority"], merged["wins"],
+                 merged["blockers"], merged["tomorrow"]),
+            )
+            row = connection.execute(
+                "SELECT * FROM daily_reviews WHERE review_date = ?", (day,)
+            ).fetchone()
+            return dict(row)
+
+    def list_reviews(self, limit: int = 7) -> list[dict[str, Any]]:
+        """Return the most recent daily reviews."""
+        if not 1 <= limit <= 365:
+            raise ValueError("Review limit must be between 1 and 365.")
+        with self._connect() as connection:
+            return [
+                dict(row) for row in connection.execute(
+                    "SELECT * FROM daily_reviews ORDER BY review_date DESC LIMIT ?",
+                    (limit,),
+                )
+            ]
 
     def dashboard(self) -> dict[str, int]:
         with self._connect() as connection:
