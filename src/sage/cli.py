@@ -223,6 +223,37 @@ def _show_blockers(store: SageStore, status: str) -> None:
             print(f"  Details: {entry['details']}")
 
 
+def _show_dashboard(store: SageStore) -> None:
+    stats = store.dashboard()
+    projects = store.list_projects()
+    open_blockers = store.list_blockers("open")
+    latest_review = store.list_reviews(1)
+    print("SAGE EXECUTIVE COCKPIT")
+    print(
+        f"Portfolio: {stats['active_projects']} active projects | "
+        f"{sum(1 for p in projects if p['status'] == 'paused')} paused"
+    )
+    print(
+        f"Execution: {stats['open_tasks']} open tasks | "
+        f"{stats['in_progress_tasks']} in progress | "
+        f"{stats['completed_tasks']} completed"
+    )
+    print(f"Attention: {len(open_blockers)} open blockers")
+    if open_blockers:
+        for item in open_blockers[:3]:
+            print(f"  ! {item['title']}")
+    print("\\nMASTER FOCUS")
+    _show_focus(store)
+    print("\\nLATEST DAILY REVIEW")
+    if latest_review:
+        review = latest_review[0]
+        print(f"  {review['review_date']} | Priority: {review['priority'] or '—'}")
+        print(f"  Wins: {review['wins'] or '—'}")
+        print(f"  Tomorrow: {review['tomorrow'] or '—'}")
+    else:
+        print("  No daily review recorded yet.")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -283,8 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             store.resolve_blocker(args.blocker_id)
             print(f"Resolved blocker #{args.blocker_id}")
         elif args.command == "dashboard":
-            for label, value in store.dashboard().items():
-                print(f"{label.replace('_', ' ').title()}: {value}")
+            _show_dashboard(store)
         elif args.command == "focus":
             _show_focus(store)
     except (ValueError, OSError) as error:
