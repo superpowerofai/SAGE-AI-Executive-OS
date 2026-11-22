@@ -27,7 +27,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Daily review record and recent review history (implemented; awaiting fresh CI run)
 - [x] 7-day and 30-day review summaries (implemented; awaiting fresh CI run)
 - [ ] Blocker and dependency tracking
-- [ ] Decision journal
+- [x] Decision journal with context, choice, rationale and revisit date (awaiting fresh CI run)
 
 ## v0.4 — Optional AI assistance
 
