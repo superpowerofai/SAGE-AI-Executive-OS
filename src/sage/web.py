@@ -13,6 +13,8 @@ def _page(store: SageStore, notice: str = "") -> str:
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
+    decisions = store.list_decisions(5)
+    plan = store.execution_plan(7)
     active = [p for p in projects if p["status"] == "active"]
     active_ids = {p["id"] for p in active}
     next_task = next((t for t in tasks if t["project_id"] in active_ids and t["status"] != "done"), None)
@@ -40,6 +42,16 @@ def _page(store: SageStore, notice: str = "") -> str:
         for b in blockers
     ) or "<li>No open blockers.</li>"
     latest = reviews[0] if reviews else {}
+    decision_rows = "".join(
+        f"<li><b>{e(d['title'])}</b>: {e(d['choice'])}"
+        f"{' — ' + e(d['rationale']) if d['rationale'] else ''}</li>"
+        for d in decisions
+    ) or "<li>No decisions recorded yet.</li>"
+    plan_rows = "".join(
+        f"<li><b>{e(t['title'])}</b> — {e(t['project_name'])} "
+        f"({e(t['due_date'] or 'no due date')})</li>"
+        for t in plan["overdue"] + plan["upcoming"][:8]
+    ) or "<li>No dated work due in the next 7 days.</li>"
     focus = (f"{e(next_task['title'])} — {e(next_task['project_name'])}"
              if next_task else "No open next action in active projects.")
     notice_html = f"<p class='notice'>{e(notice)}</p>" if notice else ""
@@ -70,6 +82,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <form method='post' action='/add-project'><input name='name' placeholder='New project name' required><input name='description' placeholder='Description'><button>Add project</button></form></section>
 <section><h2>EXECUTION</h2><div class='scroll'><table><tr><th>ID</th><th>Task</th><th>Project</th><th>Status</th><th>Priority</th><th>Update</th></tr>{task_rows}</table></div>
 <form method='post' action='/add-task'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in active)}</select><input name='title' placeholder='Next action' required><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input type='date' name='due_date'><button>Add task</button></form></section>
+<section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
+<section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
+<form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
 <section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
 <section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
 <form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
@@ -106,7 +121,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
         def do_POST(self) -> None:
             if urlparse(self.path).path not in {
                 "/add-project", "/add-task", "/task-status", "/project-status",
-                "/review", "/add-blocker", "/resolve-blocker", "/decision",
+                "/review", "/add-blocker", "/resolve-blocker", "/decision", "/decision",
             }:
                 self._send(404, "Not found")
                 return
@@ -136,6 +151,10 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                     store.save_review(data.get("priority", ""), data.get("wins", ""),
                                       data.get("blockers", ""), data.get("tomorrow", ""))
                     notice = "Daily review saved."
+                elif path == "/decision":
+                    store.add_decision(data.get("title", ""), data.get("choice", ""),
+                                       rationale=data.get("rationale", ""))
+                    notice = "Decision recorded."
                 elif path == "/add-blocker":
                     store.add_blocker(data.get("title", ""), data.get("details", ""))
                     notice = "Blocker recorded."
