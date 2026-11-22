@@ -21,6 +21,19 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS blockers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '',
+    project_id INTEGER,
+    task_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS decisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     decision_date TEXT NOT NULL,
@@ -216,6 +229,56 @@ class SageStore:
                     (limit,),
                 )
             ]
+
+    def add_blocker(
+        self, title: str, details: str = "",
+        project_id: int | None = None, task_id: int | None = None,
+    ) -> int:
+        title = title.strip()
+        if not title:
+            raise ValueError("Blocker title cannot be empty.")
+        with self._connect() as connection:
+            if project_id is not None and connection.execute(
+                "SELECT 1 FROM projects WHERE id = ?", (project_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Project {project_id} does not exist.")
+            if task_id is not None and connection.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Task {task_id} does not exist.")
+            cursor = connection.execute(
+                """INSERT INTO blockers (title, details, project_id, task_id)
+                   VALUES (?, ?, ?, ?)""",
+                (title, details.strip(), project_id, task_id),
+            )
+            return int(cursor.lastrowid)
+
+    def list_blockers(self, status: str = "open") -> list[dict[str, Any]]:
+        if status not in {"open", "resolved", "all"}:
+            raise ValueError("Blocker status must be open, resolved, or all.")
+        query = """
+            SELECT blockers.*, projects.name AS project_name, tasks.title AS task_title
+            FROM blockers
+            LEFT JOIN projects ON projects.id = blockers.project_id
+            LEFT JOIN tasks ON tasks.id = blockers.task_id
+        """
+        if status != "all":
+            query += " WHERE blockers.status = ?"
+        query += " ORDER BY blockers.created_at DESC, blockers.id DESC"
+        with self._connect() as connection:
+            rows = connection.execute(query, () if status == "all" else (status,))
+            return [dict(row) for row in rows]
+
+    def resolve_blocker(self, blocker_id: int) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE blockers SET status = 'resolved',
+                   resolved_at = CURRENT_TIMESTAMP
+                   WHERE id = ? AND status = 'open'""",
+                (blocker_id,),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Open blocker {blocker_id} does not exist.")
 
     def add_decision(
         self,
