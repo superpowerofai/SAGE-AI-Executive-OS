@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    decision_date TEXT NOT NULL,
+    title TEXT NOT NULL,
+    context TEXT NOT NULL DEFAULT '',
+    choice TEXT NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    revisit_date TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS daily_reviews (
     review_date TEXT PRIMARY KEY,
     priority TEXT NOT NULL DEFAULT '',
@@ -202,6 +213,46 @@ class SageStore:
             return [
                 dict(row) for row in connection.execute(
                     "SELECT * FROM daily_reviews ORDER BY review_date DESC LIMIT ?",
+                    (limit,),
+                )
+            ]
+
+    def add_decision(
+        self,
+        title: str,
+        choice: str,
+        context: str = "",
+        rationale: str = "",
+        decision_date: str | None = None,
+        revisit_date: str | None = None,
+    ) -> int:
+        """Record a decision and the reasoning behind it."""
+        title, choice = title.strip(), choice.strip()
+        if not title or not choice:
+            raise ValueError("Decision title and choice cannot be empty.")
+        decided = decision_date or date.today().isoformat()
+        for label, value in (("Decision date", decided), ("Revisit date", revisit_date)):
+            if value:
+                try:
+                    date.fromisoformat(value)
+                except ValueError as error:
+                    raise ValueError(f"{label} must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """INSERT INTO decisions
+                   (decision_date, title, context, choice, rationale, revisit_date)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (decided, title, context.strip(), choice, rationale.strip(), revisit_date),
+            )
+            return int(cursor.lastrowid)
+
+    def list_decisions(self, limit: int = 20) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 500:
+            raise ValueError("Decision limit must be between 1 and 500.")
+        with self._connect() as connection:
+            return [
+                dict(row) for row in connection.execute(
+                    "SELECT * FROM decisions ORDER BY decision_date DESC, id DESC LIMIT ?",
                     (limit,),
                 )
             ]
