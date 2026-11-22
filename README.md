@@ -11,7 +11,7 @@ SAGE v0.1 provides a Python command-line interface backed by SQLite. It can crea
 - Add tasks with priority 1 (highest) through 5 (lowest).
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
-- View dashboard counts for active projects and task states.
+- View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
 - Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
