@@ -44,6 +44,18 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     assert "Test venture" in updated
     assert store.list_projects()[0]["name"] == "Test venture"
 
+    decision_request = Request(
+        url + "/decision",
+        data=b"title=Market%20entry&choice=Agencies&rationale=Fastest%20route",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(decision_request, timeout=2) as response:
+        decision_page = response.read().decode()
+    assert "Decision recorded." in decision_page
+    assert "Market entry" in decision_page
+    assert store.list_decisions()[0]["choice"] == "Agencies"
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
