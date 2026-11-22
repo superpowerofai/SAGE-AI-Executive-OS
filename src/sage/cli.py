@@ -75,6 +75,18 @@ def build_parser() -> argparse.ArgumentParser:
     decisions = commands.add_parser("decisions", help="Show the decision journal")
     decisions.add_argument("--limit", type=int, default=20)
 
+    blocker = commands.add_parser("block", help="Record an execution blocker")
+    blocker.add_argument("title")
+    blocker.add_argument("--details", default="")
+    blocker.add_argument("--project-id", type=int)
+    blocker.add_argument("--task-id", type=int)
+
+    blocker_list = commands.add_parser("blockers", help="List blockers")
+    blocker_list.add_argument("--status", choices=["open", "resolved", "all"], default="open")
+
+    resolve = commands.add_parser("resolve-blocker", help="Resolve an open blocker")
+    resolve.add_argument("blocker_id", type=int)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -196,6 +208,21 @@ def _show_decisions(store: SageStore, limit: int) -> None:
             print(f"  Rationale: {entry['rationale']}")
 
 
+def _show_blockers(store: SageStore, status: str) -> None:
+    entries = store.list_blockers(status)
+    print(f"SAGE BLOCKERS — {status.upper()} ({len(entries)})")
+    if not entries:
+        print("No blockers found.")
+        return
+    for entry in entries:
+        linked = entry["project_name"] or "Unassigned"
+        if entry["task_title"]:
+            linked += f" / {entry['task_title']}"
+        print(f"\\n#{entry['id']} [{entry['status']}] {entry['title']} — {linked}")
+        if entry["details"]:
+            print(f"  Details: {entry['details']}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -245,6 +272,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Recorded decision #{decision_id}: {args.title}")
         elif args.command == "decisions":
             _show_decisions(store, args.limit)
+        elif args.command == "block":
+            blocker_id = store.add_blocker(
+                args.title, args.details, args.project_id, args.task_id
+            )
+            print(f"Recorded blocker #{blocker_id}: {args.title}")
+        elif args.command == "blockers":
+            _show_blockers(store, args.status)
+        elif args.command == "resolve-blocker":
+            store.resolve_blocker(args.blocker_id)
+            print(f"Resolved blocker #{args.blocker_id}")
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
