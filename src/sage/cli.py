@@ -64,6 +64,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_summary.add_argument("--days", type=int, choices=[7, 30], default=7)
 
+    decision = commands.add_parser("decide", help="Record an executive decision")
+    decision.add_argument("title")
+    decision.add_argument("--choice", required=True)
+    decision.add_argument("--context", default="")
+    decision.add_argument("--rationale", default="")
+    decision.add_argument("--date", dest="decision_date")
+    decision.add_argument("--revisit")
+
+    decisions = commands.add_parser("decisions", help="Show the decision journal")
+    decisions.add_argument("--limit", type=int, default=20)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -169,6 +180,22 @@ def _show_review_summary(store: SageStore, days: int) -> None:
             print(f"  Next move: {entry['tomorrow']}")
 
 
+def _show_decisions(store: SageStore, limit: int) -> None:
+    entries = store.list_decisions(limit)
+    print(f"SAGE DECISION JOURNAL ({len(entries)})")
+    if not entries:
+        print("No decisions recorded yet.")
+        return
+    for entry in entries:
+        revisit = f" | revisit {entry['revisit_date']}" if entry["revisit_date"] else ""
+        print(f"\\n#{entry['id']} {entry['decision_date']} — {entry['title']}{revisit}")
+        print(f"  Decision: {entry['choice']}")
+        if entry["context"]:
+            print(f"  Context: {entry['context']}")
+        if entry["rationale"]:
+            print(f"  Rationale: {entry['rationale']}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -210,6 +237,14 @@ def main(argv: list[str] | None = None) -> int:
             _show_reviews(store, args.limit)
         elif args.command == "review-summary":
             _show_review_summary(store, args.days)
+        elif args.command == "decide":
+            decision_id = store.add_decision(
+                args.title, args.choice, args.context, args.rationale,
+                args.decision_date, args.revisit,
+            )
+            print(f"Recorded decision #{decision_id}: {args.title}")
+        elif args.command == "decisions":
+            _show_decisions(store, args.limit)
         elif args.command == "dashboard":
             for label, value in store.dashboard().items():
                 print(f"{label.replace('_', ' ').title()}: {value}")
