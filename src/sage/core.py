@@ -206,6 +206,28 @@ class SageStore:
                 )
             ]
 
+    def review_summary(self, days: int = 7, today: date | None = None) -> dict[str, Any]:
+        """Summarize daily reviews over the last 7 or 30 calendar days."""
+        if days not in {7, 30}:
+            raise ValueError("Review summary period must be 7 or 30 days.")
+        end = today or date.today()
+        start = end - timedelta(days=days - 1)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM daily_reviews
+                   WHERE review_date BETWEEN ? AND ?
+                   ORDER BY review_date DESC""",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+        entries = [dict(row) for row in rows]
+        return {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "days": days,
+            "reviewed_days": len(entries),
+            "entries": entries,
+        }
+
     def dashboard(self) -> dict[str, int]:
         with self._connect() as connection:
             projects = connection.execute(
