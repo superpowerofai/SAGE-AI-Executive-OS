@@ -6,6 +6,7 @@ It stores data in a SQLite database on the user's machine.
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -13,12 +14,26 @@ from typing import Any
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS ventures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'paused', 'completed')),
+    monthly_budget_cap REAL,
+    weekly_hours_cap REAL,
+    strategic_priority INTEGER NOT NULL DEFAULT 3
+        CHECK (strategic_priority BETWEEN 1 AND 5),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'paused', 'completed')),
+    venture_id INTEGER REFERENCES ventures(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -77,6 +92,14 @@ class SageStore:
         self.database = str(database)
         with self._connect() as connection:
             connection.executescript(SCHEMA)
+            project_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(projects)")
+            }
+            if "venture_id" not in project_columns:
+                connection.execute(
+                    "ALTER TABLE projects ADD COLUMN venture_id INTEGER "
+                    "REFERENCES ventures(id) ON DELETE SET NULL"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database)
@@ -84,14 +107,130 @@ class SageStore:
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
-    def add_project(self, name: str, description: str = "") -> int:
+
+    @staticmethod
+    def _optional_nonnegative_number(value: float | None, label: str) -> float | None:
+        if value is None:
+            return None
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(f"{label} must be a finite non-negative number.")
+        return number
+
+    def add_venture(
+        self, name: str, description: str = "",
+        monthly_budget_cap: float | None = None,
+        weekly_hours_cap: float | None = None,
+        strategic_priority: int = 3,
+    ) -> int:
+        name = name.strip()
+        if not name:
+            raise ValueError("Venture name cannot be empty.")
+        if strategic_priority not in range(1, 6):
+            raise ValueError("Strategic priority must be between 1 (highest) and 5 (lowest).")
+        budget = self._optional_nonnegative_number(monthly_budget_cap, "Monthly budget cap")
+        hours = self._optional_nonnegative_number(weekly_hours_cap, "Weekly hours cap")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """INSERT INTO ventures
+                   (name, description, monthly_budget_cap, weekly_hours_cap, strategic_priority)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, description.strip(), budget, hours, strategic_priority),
+            )
+            return int(cursor.lastrowid)
+
+    def list_ventures(self, status: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM ventures"
+        values: tuple[Any, ...] = ()
+        if status is not None:
+            if status not in {"active", "paused", "completed"}:
+                raise ValueError("Invalid venture status.")
+            query += " WHERE status = ?"
+            values = (status,)
+        query += " ORDER BY strategic_priority, created_at, id"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, values)]
+
+    def set_venture_status(self, venture_id: int, status: str) -> None:
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError("Status must be active, paused, or completed.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE ventures SET status = ? WHERE id = ?", (status, venture_id)
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+
+    def assign_project_to_venture(self, project_id: int, venture_id: int | None) -> None:
+        with self._connect() as connection:
+            if venture_id is not None and connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            cursor = connection.execute(
+                "UPDATE projects SET venture_id = ? WHERE id = ?", (venture_id, project_id)
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Project {project_id} does not exist.")
+
+    def portfolio_summary(self) -> dict[str, Any]:
+        """Summarize venture ownership and explicitly entered resource caps."""
+        ventures = self.list_ventures()
+        with self._connect() as connection:
+            summaries = []
+            for venture in ventures:
+                row = connection.execute(
+                    """SELECT COUNT(DISTINCT p.id) AS projects,
+                              SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) AS active_projects,
+                              SUM(CASE WHEN t.status != 'done' THEN 1 ELSE 0 END) AS open_tasks,
+                              SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_tasks
+                       FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
+                       WHERE p.venture_id = ?""",
+                    (venture["id"],),
+                ).fetchone()
+                summaries.append({
+                    **venture,
+                    "projects": int(row["projects"] or 0),
+                    "active_projects": int(row["active_projects"] or 0),
+                    "open_tasks": int(row["open_tasks"] or 0),
+                    "in_progress_tasks": int(row["in_progress_tasks"] or 0),
+                })
+            unassigned = connection.execute(
+                "SELECT COUNT(*) FROM projects WHERE venture_id IS NULL"
+            ).fetchone()[0]
+        return {
+            "ventures": summaries,
+            "unassigned_projects": int(unassigned),
+            "known_monthly_budget_caps": sum(
+                item["monthly_budget_cap"] or 0 for item in summaries
+                if item["monthly_budget_cap"] is not None
+            ),
+            "budget_cap_entries": sum(
+                item["monthly_budget_cap"] is not None for item in summaries
+            ),
+            "known_weekly_hours_caps": sum(
+                item["weekly_hours_cap"] or 0 for item in summaries
+                if item["weekly_hours_cap"] is not None
+            ),
+            "hours_cap_entries": sum(
+                item["weekly_hours_cap"] is not None for item in summaries
+            ),
+        }
+
+    def add_project(
+        self, name: str, description: str = "", venture_id: int | None = None
+    ) -> int:
         name = name.strip()
         if not name:
             raise ValueError("Project name cannot be empty.")
         with self._connect() as connection:
+            if venture_id is not None and connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
             cursor = connection.execute(
-                "INSERT INTO projects (name, description) VALUES (?, ?)",
-                (name, description.strip()),
+                "INSERT INTO projects (name, description, venture_id) VALUES (?, ?, ?)",
+                (name, description.strip(), venture_id),
             )
             return int(cursor.lastrowid)
 
@@ -435,7 +574,7 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("projects", "tasks", "daily_reviews", "decisions", "blockers")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
