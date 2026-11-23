@@ -16,7 +16,8 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
 - View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.
-- Launch a browser-based local cockpit to manage ventures, project ownership, expense/time logs, projects/tasks, statuses, daily reviews, blockers and decisions.
+- Launch a browser-based local cockpit to manage ventures, project ownership, income/expense/time logs, projects/tasks, statuses, daily reviews, blockers and decisions.
+- Export open dated tasks from active projects to an iCalendar `.ics` file for import into calendar apps.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
 - Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
@@ -97,6 +98,7 @@ sage log-expense 1 1250 --note "Hosting"
 sage log-income 1 9500 --note "Client payment"
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
+sage export-ics exports/sage-calendar.ics
 sage backup backups/sage.db
 sage export-json exports/sage.json
 sage --db data/imported.db import-json exports/sage.json  # new, empty database
