@@ -408,14 +408,21 @@ class SageStore:
                          COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
                            AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_receivables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
-                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_payables
+                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_payables,
+                         COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
+                           AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_receivables,
+                         COALESCE(SUM(CASE WHEN obligation_type = 'payable'
+                           AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_payables
                        FROM financial_obligations WHERE venture_id = ?""",
-                    (as_of.isoformat(), forecast_end, as_of.isoformat(), forecast_end, venture["id"]),
+                    (as_of.isoformat(), forecast_end, as_of.isoformat(), forecast_end,
+                     as_of.isoformat(), as_of.isoformat(), venture["id"]),
                 ).fetchone()
                 open_receivables = float(obligations["receivables"])
                 open_payables = float(obligations["payables"])
                 due_receivables_30d = float(obligations["due_receivables"])
                 due_payables_30d = float(obligations["due_payables"])
+                overdue_receivables = float(obligations["overdue_receivables"])
+                overdue_payables = float(obligations["overdue_payables"])
                 budget_cap = venture["monthly_budget_cap"]
                 hours_cap = venture["weekly_hours_cap"]
                 active_projects = int(row["active_projects"] or 0)
@@ -433,6 +440,8 @@ class SageStore:
                     hours_remaining is not None and hours_remaining < 0
                 ):
                     signal = "Recorded cap exceeded: review commitments before adding resources."
+                elif overdue_payables > 0:
+                    signal = "Open payables are overdue; review settlement before adding new commitments."
                 elif due_payables_30d > due_receivables_30d:
                     signal = "Recorded payables due within 30 days exceed recorded receivables; cash balance is unknown, so review liquidity before new commitments."
                 elif active_projects == 0:
@@ -456,6 +465,8 @@ class SageStore:
                     "open_payables": open_payables,
                     "receivables_due_30d": due_receivables_30d,
                     "payables_due_30d": due_payables_30d,
+                    "overdue_receivables": overdue_receivables,
+                    "overdue_payables": overdue_payables,
                     "expected_obligation_cashflow_30d": due_receivables_30d - due_payables_30d,
                     "month_budget_remaining": budget_remaining,
                     "week_hours_used": week_hours,
