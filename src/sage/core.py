@@ -5,6 +5,7 @@ It stores data in a SQLite database on the user's machine.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import math
 import os
@@ -84,6 +85,19 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS recurring_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    frequency_interval INTEGER NOT NULL DEFAULT 1 CHECK (frequency_interval BETWEEN 1 AND 365),
+    next_due_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS resource_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     venture_id INTEGER NOT NULL,
@@ -479,6 +493,123 @@ class SageStore:
         with self._connect() as connection:
             return [dict(row) for row in connection.execute(query, values)]
 
+
+    def add_recurring_task(
+        self, project_id: int, title: str, priority: int = 3,
+        frequency: str = "weekly", frequency_interval: int = 1,
+        start_date: str | None = None,
+    ) -> int:
+        title = title.strip()
+        if not title:
+            raise ValueError("Recurring task title cannot be empty.")
+        if priority not in range(1, 6):
+            raise ValueError("Priority must be between 1 (highest) and 5 (lowest).")
+        if frequency not in {"daily", "weekly", "monthly"}:
+            raise ValueError("Frequency must be daily, weekly or monthly.")
+        if frequency_interval not in range(1, 366):
+            raise ValueError("Repeat interval must be between 1 and 365.")
+        due = start_date or date.today().isoformat()
+        try:
+            date.fromisoformat(due)
+        except ValueError as error:
+            raise ValueError("Start date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM projects WHERE id = ?", (project_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Project {project_id} does not exist.")
+            cursor = connection.execute(
+                """INSERT INTO recurring_tasks
+                   (project_id, title, priority, frequency, frequency_interval, next_due_date)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (project_id, title, priority, frequency, frequency_interval, due),
+            )
+            return int(cursor.lastrowid)
+
+    def list_recurring_tasks(self, status: str | None = None) -> list[dict[str, Any]]:
+        query = """SELECT recurring_tasks.*, projects.name AS project_name
+                   FROM recurring_tasks JOIN projects ON projects.id = recurring_tasks.project_id"""
+        values: tuple[Any, ...] = ()
+        if status is not None:
+            if status not in {"active", "paused", "completed"}:
+                raise ValueError("Invalid recurring-task status.")
+            query += " WHERE recurring_tasks.status = ?"
+            values = (status,)
+        query += " ORDER BY next_due_date, recurring_tasks.id"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, values)]
+
+    def set_recurring_task_status(self, recurring_id: int, status: str) -> None:
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError("Status must be active, paused or completed.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE recurring_tasks SET status = ? WHERE id = ?",
+                (status, recurring_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Recurring task {recurring_id} does not exist.")
+
+    @staticmethod
+    def _next_recurring_date(current: date, frequency: str, interval: int) -> date:
+        if frequency == "daily":
+            return current + timedelta(days=interval)
+        if frequency == "weekly":
+            return current + timedelta(days=7 * interval)
+        month_index = current.year * 12 + current.month - 1 + interval
+        year, month_zero = divmod(month_index, 12)
+        month = month_zero + 1
+        day = min(current.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
+
+    def generate_recurring_tasks(
+        self, through: date | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Create due recurring task instances, bounded to avoid runaway backlogs."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("Generation limit must be between 1 and 1000.")
+        as_of = through or date.today()
+        created: list[dict[str, Any]] = []
+        with self._connect() as connection:
+            rules = connection.execute(
+                """SELECT recurring_tasks.*, projects.status AS project_status
+                   FROM recurring_tasks JOIN projects ON projects.id = recurring_tasks.project_id
+                   WHERE recurring_tasks.status = 'active'
+                     AND projects.status = 'active'
+                     AND recurring_tasks.next_due_date <= ?
+                   ORDER BY recurring_tasks.next_due_date, recurring_tasks.id""",
+                (as_of.isoformat(),),
+            ).fetchall()
+            remaining = limit
+            for row in rules:
+                rule = dict(row)
+                due = date.fromisoformat(rule["next_due_date"])
+                while due <= as_of and remaining > 0:
+                    cursor = connection.execute(
+                        """INSERT INTO tasks (project_id, title, priority, due_date)
+                           VALUES (?, ?, ?, ?)""",
+                        (rule["project_id"], rule["title"], rule["priority"], due.isoformat()),
+                    )
+                    created.append({
+                        "task_id": int(cursor.lastrowid),
+                        "recurring_id": rule["id"],
+                        "project_id": rule["project_id"],
+                        "project_name": rule["project_name"] if "project_name" in rule else None,
+                        "title": rule["title"],
+                        "due_date": due.isoformat(),
+                    })
+                    due = self._next_recurring_date(
+                        due, rule["frequency"], rule["frequency_interval"]
+                    )
+                    remaining -= 1
+                connection.execute(
+                    "UPDATE recurring_tasks SET next_due_date = ? WHERE id = ?",
+                    (due.isoformat(), rule["id"]),
+                )
+                if remaining == 0:
+                    break
+        return created
+
     def add_task(
         self,
         project_id: int,
@@ -841,6 +972,7 @@ class SageStore:
             "recent_reviews": self.list_reviews(7),
             "recent_decisions": self.list_decisions(15),
             "recent_resource_entries": self.list_resource_entries(limit=30),
+            "recurring_tasks": self.list_recurring_tasks()[:30],
         }
 
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -877,17 +1009,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3}:
+        if version not in {1, 2, 3, 4}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks",
         )
         for table in tables:
-            if table not in data and version in {1, 2} and table in {"ventures", "resource_entries", "income_entries"}:
+            if table not in data and version in {1, 2, 3} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1057,7 +1189,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 3,
+                "version": 4,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
