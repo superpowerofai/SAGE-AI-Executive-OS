@@ -82,3 +82,47 @@ def test_existing_database_gets_venture_column_without_losing_projects(tmp_path)
     venture = store.add_venture("Migrated portfolio")
     store.assign_project_to_venture(legacy["id"], venture)
     assert store.portfolio_summary()["ventures"][0]["projects"] == 1
+
+
+def test_resource_logs_calculate_monthly_spend_and_weekly_hours(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "usage.db")
+    venture = store.add_venture(
+        "OPERONIX AI", monthly_budget_cap=20000, weekly_hours_cap=20
+    )
+    project = store.add_project("Client automation", venture_id=venture)
+    store.log_resource(venture, "expense", 4500, "2026-11-05", project, "Software")
+    store.log_resource(venture, "expense", 1500, "2026-10-31", project, "Prior month")
+    store.log_resource(venture, "time", 6.5, "2026-11-23", project, "Build")
+    store.log_resource(venture, "time", 4, "2026-11-16", project, "Prior week")
+    summary = store.portfolio_summary(today=date(2026, 11, 23))
+    item = summary["ventures"][0]
+    assert item["month_spend"] == 4500
+    assert item["month_budget_remaining"] == 15500
+    assert item["week_hours_used"] == 6.5
+    assert item["week_hours_remaining"] == 13.5
+    assert len(store.list_resource_entries(venture)) == 4
+
+
+def test_resource_log_rejects_project_from_another_venture(tmp_path):
+    store = SageStore(tmp_path / "resource-link.db")
+    first = store.add_venture("First")
+    second = store.add_venture("Second")
+    project = store.add_project("First project", venture_id=first)
+    try:
+        store.log_resource(second, "expense", 100, project_id=project)
+        assert False, "cross-venture resource assignment must fail"
+    except ValueError as error:
+        assert "belong" in str(error)
+
+
+def test_resource_log_rejects_zero_or_invalid_quantity(tmp_path):
+    store = SageStore(tmp_path / "resource-validation.db")
+    venture = store.add_venture("Validation")
+    for amount in (0, -2, float("nan")):
+        try:
+            store.log_resource(venture, "time", amount)
+            assert False, "invalid resource quantity must fail"
+        except ValueError:
+            pass
