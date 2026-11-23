@@ -238,6 +238,26 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Obligation settled" in settled_page
     assert store.list_obligations("settled")[0]["description"] == "Client invoice"
 
+    recurring_obligation_request = Request(
+        url + "/add-recurring-obligation",
+        data=b"venture_id=1&obligation_type=payable&amount=1500&description=Monthly%20hosting&frequency=monthly&every=1&start_date=2026-11-23",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(recurring_obligation_request, timeout=2) as response:
+        recurring_finance_page = response.read().decode()
+    assert "Recurring financial rule created." in recurring_finance_page
+    generate_finance_request = Request(
+        url + "/generate-recurring-obligations",
+        data=b"",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(generate_finance_request, timeout=2) as response:
+        generated_finance_page = response.read().decode()
+    assert "Generated 1 financial obligation(s)." in generated_finance_page
+    assert any(item["description"] == "Monthly hosting" for item in store.list_obligations("open"))
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
