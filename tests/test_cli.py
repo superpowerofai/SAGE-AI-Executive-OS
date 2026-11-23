@@ -155,3 +155,10 @@ def test_cli_edit_and_archive_commands(tmp_path, capsys):
     assert "Archived task #1" in capsys.readouterr().out
     assert main(["--db", database, "archive-project", "1"]) == 0
     assert "Archived project #1" in capsys.readouterr().out
+
+
+def test_cli_ai_suggestion_requires_explicit_context_consent(tmp_path):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        main(["--db", str(tmp_path / "ai.db"), "suggest", "Choose my next priority"])
