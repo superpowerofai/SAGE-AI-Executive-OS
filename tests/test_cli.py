@@ -96,3 +96,29 @@ def test_cli_restore_requires_explicit_confirmation(tmp_path):
     database = str(tmp_path / "active.db")
     with pytest.raises(SystemExit):
         main(["--db", database, "restore", str(tmp_path / "backup.db")])
+
+
+def test_cli_backup_export_and_confirmed_restore(tmp_path, capsys):
+    database = str(tmp_path / "active.db")
+    backup = str(tmp_path / "backup.db")
+    exported = str(tmp_path / "export.json")
+
+    main(["--db", database, "add-project", "Keep this"])
+    capsys.readouterr()
+    assert main(["--db", database, "backup", backup]) == 0
+    assert "Database backup created" in capsys.readouterr().out
+
+    main(["--db", database, "add-project", "Remove after restore"])
+    capsys.readouterr()
+    assert main(["--db", database, "export-json", exported]) == 0
+    assert "JSON export created" in capsys.readouterr().out
+
+    assert main(["--db", database, "restore", backup, "--yes"]) == 0
+    output = capsys.readouterr().out
+    assert "Restored database from" in output
+    assert "Previous database preserved at" in output
+
+    main(["--db", database, "projects"])
+    project_output = capsys.readouterr().out
+    assert "Keep this" in project_output
+    assert "Remove after restore" not in project_output
