@@ -29,6 +29,8 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create an integrity-checked SQLite backup without interrupting normal reads.
 - Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
 - Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON.
+- Preview the exact bounded business context prepared for AI; external transmission requires the explicit `--send-context` flag.
+- Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
 
 ## Requirements
 
@@ -110,6 +112,28 @@ sage dashboard
 Use `--db path/to/file.db` before any command to choose a database file. By default, SAGE creates `sage.db` in the current working directory.
 
 You can also launch the CLI with `python -m sage` after installing the package.
+
+## Optional AI suggestions
+
+SAGE supports OpenAI-compatible chat-completion endpoints. It does not store API credentials.
+
+For a local endpoint, configure the base URL and model in your shell (example for a local server exposing an OpenAI-compatible API):
+
+```powershell
+$env:SAGE_AI_BASE_URL = "http://127.0.0.1:11434/v1"
+$env:SAGE_AI_MODEL = "your-local-model"
+```
+
+For a remote provider, use its HTTPS base URL and set `SAGE_AI_API_KEY` in the environment. Do not put secrets in source files or commit them.
+
+Preview the context first, then explicitly approve transmission:
+
+```bash
+sage context-preview
+sage suggest "What should receive my next focused work block?" --send-context
+```
+
+AI responses are suggestions only. They are not automatically saved as decisions, tasks, or actions. The context preview includes venture records, project/task lists, open blockers, recent reviews/decisions, and recent resource entries; inspect it before sending.
 
 ## GitHub Actions
 
