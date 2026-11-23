@@ -122,3 +122,16 @@ def test_cli_backup_export_and_confirmed_restore(tmp_path, capsys):
     project_output = capsys.readouterr().out
     assert "Keep this" in project_output
     assert "Remove after restore" not in project_output
+
+
+def test_cli_serve_invokes_local_web_cockpit(tmp_path, monkeypatch):
+    from sage import web
+
+    called = {}
+    def fake_serve(store, host, port):
+        called.update(host=host, port=port, database=store.database)
+
+    monkeypatch.setattr(web, "serve", fake_serve)
+    database = str(tmp_path / "serve.db")
+    assert main(["--db", database, "serve", "--host", "localhost", "--port", "9876"]) == 0
+    assert called == {"host": "localhost", "port": 9876, "database": database}
