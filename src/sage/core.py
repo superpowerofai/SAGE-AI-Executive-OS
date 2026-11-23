@@ -472,17 +472,20 @@ class SageStore:
                     # A future-dated balance cannot establish cash as of this report date.
                     if cash_position_date <= as_of.isoformat():
                         actual_income_since = connection.execute(
-                        """SELECT COALESCE(SUM(amount), 0) FROM income_entries
-                           WHERE venture_id = ? AND entry_date > ? AND entry_date <= ?""",
-                        (venture["id"], cash_position_date, as_of.isoformat()),
-                    ).fetchone()[0]
-                    actual_expenses_since = connection.execute(
-                        """SELECT COALESCE(SUM(quantity), 0) FROM resource_entries
-                           WHERE venture_id = ? AND entry_type = 'expense'
-                             AND entry_date > ? AND entry_date <= ?""",
-                        (venture["id"], cash_position_date, as_of.isoformat()),
-                    ).fetchone()[0]
-                        cash_balance = cash_opening_balance + float(actual_income_since) - float(actual_expenses_since)
+                            """SELECT COALESCE(SUM(amount), 0) FROM income_entries
+                               WHERE venture_id = ? AND entry_date > ? AND entry_date <= ?""",
+                            (venture["id"], cash_position_date, as_of.isoformat()),
+                        ).fetchone()[0]
+                        actual_expenses_since = connection.execute(
+                            """SELECT COALESCE(SUM(quantity), 0) FROM resource_entries
+                               WHERE venture_id = ? AND entry_type = 'expense'
+                                 AND entry_date > ? AND entry_date <= ?""",
+                            (venture["id"], cash_position_date, as_of.isoformat()),
+                        ).fetchone()[0]
+                        cash_balance = (
+                            cash_opening_balance + float(actual_income_since)
+                            - float(actual_expenses_since)
+                        )
                 forecast_cash_balance = (
                     cash_balance + due_receivables_30d - due_payables_30d
                     if cash_balance is not None else None
