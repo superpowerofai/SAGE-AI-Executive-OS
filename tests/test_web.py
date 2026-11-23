@@ -92,6 +92,17 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     assert "Resource entry recorded." in resource_page
     assert store.list_resource_entries(venture_id)[0]["quantity"] == 1250
 
+    income_request = Request(
+        url + "/log-resource",
+        data=f"venture_id={venture_id}&entry_type=income&quantity=5000&note=Client%20payment".encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(income_request, timeout=2) as response:
+        income_page = response.read().decode()
+    assert "Resource entry recorded." in income_page
+    assert any(item["entry_type"] == "income" for item in store.list_resource_entries(venture_id))
+
     edit_project_request = Request(
         url + "/edit-project",
         data=b"id=1&name=Edited%20project&description=Updated%20description",
