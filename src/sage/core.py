@@ -848,7 +848,7 @@ class SageStore:
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries",
+            "decisions", "blockers", "resource_entries", "income_entries",
         )
         for table in tables:
             if table not in data and version in {1, 2} and table in {"ventures", "resource_entries", "income_entries"}:
@@ -951,7 +951,7 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "income_entries")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
