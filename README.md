@@ -134,6 +134,8 @@ You can also launch the CLI with `python -m sage` after installing the package.
 
 On Windows, double-click `start_sage.bat` from the project folder to launch the local cockpit. It uses `runtime/data/sage.db` and binds only to `127.0.0.1:8765`. Keep the terminal window open while using the cockpit.
 
+Optional daily automation (Windows): run `powershell -ExecutionPolicy Bypass -File .\\install_sage_scheduler.ps1`. The installer asks for a daily time (default 08:00). The scheduled job generates due recurring tasks and receivables/payables; it does not pay or collect money. It runs in your Windows user session and logs to `runtime/logs/daily-generation.log`. Remove it with `powershell -ExecutionPolicy Bypass -File .\\remove_sage_scheduler.ps1`.
+
 ## Optional AI suggestions
 
 SAGE supports OpenAI-compatible chat-completion endpoints. It does not store API credentials.
