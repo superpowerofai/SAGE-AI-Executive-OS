@@ -11,6 +11,7 @@ from .core import SageStore
 def _page(store: SageStore, notice: str = "") -> str:
     projects = store.list_projects()
     ventures = store.portfolio_summary()["ventures"]
+    resource_entries = store.list_resource_entries(limit=12)
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -33,9 +34,16 @@ def _page(store: SageStore, notice: str = "") -> str:
         f"<tr><td>#{v['id']}</td><td>{e(v['name'])}</td><td>P{v['strategic_priority']}</td>"
         f"<td>{v['active_projects']}/{v['projects']}</td><td>{v['open_tasks']}</td>"
         f"<td>{'₹' + format(v['monthly_budget_cap'], ',.2f') if v['monthly_budget_cap'] is not None else 'Not set'}</td>"
-        f"<td>{str(v['weekly_hours_cap']) if v['weekly_hours_cap'] is not None else 'Not set'}</td></tr>"
+        f"<td>₹{v['month_spend']:,.2f}</td>"
+        f"<td>{str(v['weekly_hours_cap']) if v['weekly_hours_cap'] is not None else 'Not set'}</td>"
+        f"<td>{v['week_hours_used']:g}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='7'>No ventures registered yet.</td></tr>"
+    resource_rows = "".join(
+        f"<li>{e(r['entry_date'])} · {e(r['venture_name'])} · "
+        f"{'₹' + format(r['quantity'], ',.2f') if r['entry_type'] == 'expense' else str(r['quantity']) + ' hours'}"
+        f"{' · ' + e(r['note']) if r['note'] else ''}</li>" for r in resource_entries
+    ) or "<li>No resource entries recorded yet.</li>"
     task_rows = "".join(
         f"<tr><td>#{t['id']}</td><td>{e(t['title'])}</td><td>{e(t['project_name'])}</td>"
         f"<td>{e(t['status'])}</td><td>P{t['priority']}</td><td>"
@@ -87,8 +95,10 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
 <section><h2>VENTURE PORTFOLIO</h2><p>Resource caps are optional planning inputs you enter; SAGE does not infer budgets or available hours.</p>
-<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly budget cap (₹)</th><th>Weekly hours cap</th></tr>{venture_rows}</table></div>
-<form method='post' action='/add-venture'><input name='name' placeholder='New venture name' required><input name='description' placeholder='Description'><input name='monthly_budget_cap' type='number' min='0' step='0.01' placeholder='Monthly budget cap ₹'><input name='weekly_hours_cap' type='number' min='0' step='0.5' placeholder='Weekly hours cap'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><button>Add venture</button></form></section>
+<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Spent this month (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th></tr>{venture_rows}</table></div>
+<form method='post' action='/add-venture'><input name='name' placeholder='New venture name' required><input name='description' placeholder='Description'><input name='monthly_budget_cap' type='number' min='0' step='0.01' placeholder='Monthly budget cap ₹'><input name='weekly_hours_cap' type='number' min='0' step='0.5' placeholder='Weekly hours cap'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><button>Add venture</button></form>
+<form method='post' action='/log-resource'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='entry_type'><option value='expense'>Expense (₹)</option><option value='time'>Time (hours)</option></select><input name='quantity' type='number' min='0.01' step='0.01' placeholder='Amount / hours' required><input name='note' placeholder='What was spent / worked on'><button>Log resource</button></form>
+<h3>Recent resource entries</h3><ul>{resource_rows}</ul></section>
 <section><h2>PROJECT PORTFOLIO</h2><div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Venture</th><th>Status</th><th>Change status</th></tr>{project_rows}</table></div>
 <form method='post' action='/add-project'><input name='name' placeholder='New project name' required><input name='description' placeholder='Description'><select name='venture_id'><option value=''>No venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><button>Add project</button></form>
 <form method='post' action='/assign-project'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects)}</select><select name='venture_id'><option value='0'>Unassigned</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><button>Assign project</button></form></section>
@@ -132,7 +142,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
 
         def do_POST(self) -> None:
             if urlparse(self.path).path not in {
-                "/add-project", "/add-venture", "/assign-project", "/add-task",
+                "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
                 "/task-status", "/project-status", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
@@ -162,6 +172,13 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         int(data["project_id"]), None if venture_id == 0 else venture_id
                     )
                     notice = "Project venture assignment updated."
+                elif path == "/log-resource":
+                    store.log_resource(
+                        int(data["venture_id"]), data.get("entry_type", "expense"),
+                        float(data.get("quantity", "0")), project_id=None,
+                        note=data.get("note", ""),
+                    )
+                    notice = "Resource entry recorded."
                 elif path == "/add-task":
                     due = data.get("due_date") or None
                     store.add_task(int(data["project_id"]), data.get("title", ""),
