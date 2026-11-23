@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from pathlib import Path
 
 from .core import SageStore
@@ -450,6 +451,30 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "set-task-status":
             store.set_task_status(args.task_id, args.status)
             print(f"Updated task #{args.task_id} to {args.status}")
+        elif args.command == "add-recurring-task":
+            recurring_id = store.add_recurring_task(
+                args.project_id, args.title, args.priority, args.frequency,
+                args.every, args.start_date,
+            )
+            print(f"Created recurring rule #{recurring_id}: {args.title}")
+        elif args.command == "recurring-tasks":
+            rules = store.list_recurring_tasks()
+            print(f"SAGE RECURRING TASKS ({len(rules)})")
+            for rule in rules:
+                print(
+                    f"#{rule['id']} [{rule['status']}] {rule['title']} "
+                    f"| {rule['frequency']} every {rule['frequency_interval']} "
+                    f"| next {rule['next_due_date']} | project: {rule['project_name']}"
+                )
+        elif args.command == "set-recurring-status":
+            store.set_recurring_task_status(args.recurring_id, args.status)
+            print(f"Recurring rule #{args.recurring_id} set to {args.status}")
+        elif args.command == "generate-recurring":
+            through = date.fromisoformat(args.through) if args.through else None
+            generated = store.generate_recurring_tasks(through, args.limit)
+            print(f"Generated {len(generated)} recurring task(s).")
+            for task in generated:
+                print(f"  #{task['task_id']} {task['due_date']} {task['title']} ({task['project_name']})")
         elif args.command == "set-project-status":
             store.set_project_status(args.project_id, args.status)
             print(f"Updated project #{args.project_id} to {args.status}")
