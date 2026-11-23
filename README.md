@@ -9,7 +9,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create projects with a name, optional description and optional venture owner.
 - Register ventures with strategic priority plus optional monthly budget and weekly hours caps.
 - Assign and reassign projects to ventures; compare project/task load and explicitly entered resource caps in a portfolio summary.
-- Log actual INR expenses and hours worked against ventures (optionally linked to a project), compare month-to-date / week-to-date usage with caps, and see transparent rule-based allocation signals using entered priorities and recorded headroom.
+- Log actual INR income, expenses and hours worked against ventures (optionally linked to a project); compare monthly income, expenses and net cash flow plus weekly time usage with caps, and see transparent rule-based allocation signals.
 - Edit project names/descriptions and task titles/priorities/due dates; archive projects and tasks by marking them completed/done.
 - Track project status: active, paused, completed.
 - Add tasks with priority 1 (highest) through 5 (lowest).
@@ -28,7 +28,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Persist data in a local SQLite database.
 - Create an integrity-checked SQLite backup without interrupting normal reads.
 - Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
-- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
+- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers, resource entries and income entries) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
 - Preview the exact bounded business context prepared for AI; external transmission requires the explicit `--send-context` flag.
 - Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
 
@@ -94,6 +94,7 @@ sage add-venture "OPERONIX AI" --priority 1 --monthly-budget-cap 25000 --weekly-
 sage add-project "Lead follow-up system" --venture-id 1
 sage ventures
 sage log-expense 1 1250 --note "Hosting"
+sage log-income 1 9500 --note "Client payment"
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
 sage backup backups/sage.db
