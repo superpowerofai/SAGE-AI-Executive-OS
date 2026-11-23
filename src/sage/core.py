@@ -407,6 +407,55 @@ class SageStore:
         with self._connect() as connection:
             return [dict(row) for row in connection.execute(query, values)]
 
+    def update_project(
+        self, project_id: int, name: str | None = None, description: str | None = None
+    ) -> None:
+        if name is not None and not name.strip():
+            raise ValueError("Project name cannot be empty.")
+        if name is None and description is None:
+            raise ValueError("Provide a new project name or description.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE projects SET
+                   name = COALESCE(?, name),
+                   description = COALESCE(?, description)
+                   WHERE id = ?""",
+                (name.strip() if name is not None else None,
+                 description.strip() if description is not None else None, project_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Project {project_id} does not exist.")
+
+    def update_task(
+        self, task_id: int, title: str | None = None, priority: int | None = None,
+        due_date: str | None = None, clear_due_date: bool = False,
+    ) -> None:
+        if title is not None and not title.strip():
+            raise ValueError("Task title cannot be empty.")
+        if priority is not None and priority not in range(1, 6):
+            raise ValueError("Priority must be between 1 (highest) and 5 (lowest).")
+        if due_date is not None:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError as error:
+                raise ValueError("Due date must use YYYY-MM-DD format.") from error
+        if clear_due_date and due_date is not None:
+            raise ValueError("Choose either a due date or --clear-due-date, not both.")
+        if title is None and priority is None and due_date is None and not clear_due_date:
+            raise ValueError("Provide at least one task field to update.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE tasks SET
+                   title = COALESCE(?, title),
+                   priority = COALESCE(?, priority),
+                   due_date = CASE WHEN ? THEN NULL ELSE COALESCE(?, due_date) END
+                   WHERE id = ?""",
+                (title.strip() if title is not None else None, priority,
+                 int(clear_due_date), due_date, task_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Task {task_id} does not exist.")
+
     def set_task_status(self, task_id: int, status: str) -> None:
         if status not in {"todo", "in_progress", "done"}:
             raise ValueError("Status must be todo, in_progress, or done.")
