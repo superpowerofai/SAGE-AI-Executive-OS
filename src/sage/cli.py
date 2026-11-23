@@ -145,6 +145,13 @@ def build_parser() -> argparse.ArgumentParser:
     restore.add_argument("source", help="Backup database file to restore")
     restore.add_argument("--yes", action="store_true", help="Confirm replacing the active database")
 
+    commands.add_parser("context-preview", help="Preview the exact SAGE context prepared for AI")
+    suggest = commands.add_parser("suggest", help="Ask an external AI for an advisory suggestion")
+    suggest.add_argument("goal", help="What you want help deciding or planning")
+    suggest.add_argument("--send-context", action="store_true",
+                         help="Explicitly approve sending the context preview to the configured provider")
+    suggest.add_argument("--timeout", type=float, default=45.0)
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
@@ -474,6 +481,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Previous database preserved at: {safety_copy}")
             else:
                 print("No previous database existed; no pre-restore copy was needed.")
+        elif args.command == "context-preview":
+            from .ai import preview_context
+            print(preview_context(store))
+        elif args.command == "suggest":
+            if not args.send_context:
+                raise ValueError(
+                    "SAGE context is not sent automatically. Review 'sage context-preview' "
+                    "then re-run with --send-context to approve external transmission."
+                )
+            from .ai import AIConfig, generate_suggestion
+            config = AIConfig.from_env(timeout=args.timeout)
+            print("SAGE AI SUGGESTION — ADVISORY ONLY; NO RECORDS WERE CHANGED")
+            print(generate_suggestion(store, args.goal, config))
         elif args.command == "dashboard":
             _show_dashboard(store)
         elif args.command == "focus":
