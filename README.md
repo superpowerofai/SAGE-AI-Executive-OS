@@ -26,6 +26,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
 - Persist data in a local SQLite database.
 - Create an integrity-checked SQLite backup without interrupting normal reads.
+- Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
 - Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON.
 
 ## Requirements
@@ -92,6 +93,8 @@ sage ventures
 sage log-expense 1 1250 --note "Hosting"
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
+sage backup backups/sage.db
+sage restore backups/sage.db --yes
 sage plan --days 7
 sage plan --days 30
 ```
