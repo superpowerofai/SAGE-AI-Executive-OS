@@ -85,6 +85,21 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS task_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+    due_date TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    approved_task_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    decided_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (approved_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS recurring_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -493,6 +508,87 @@ class SageStore:
         with self._connect() as connection:
             return [dict(row) for row in connection.execute(query, values)]
 
+
+
+    def create_task_proposal(
+        self, project_id: int, title: str, rationale: str = "",
+        priority: int = 3, due_date: str | None = None,
+    ) -> int:
+        title = title.strip()
+        if not title:
+            raise ValueError("Proposed task title cannot be empty.")
+        if priority not in range(1, 6):
+            raise ValueError("Priority must be between 1 (highest) and 5 (lowest).")
+        if due_date is not None:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError as error:
+                raise ValueError("Due date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM projects WHERE id = ?", (project_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Project {project_id} does not exist.")
+            cursor = connection.execute(
+                """INSERT INTO task_proposals
+                   (project_id, title, rationale, priority, due_date)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (project_id, title, rationale.strip(), priority, due_date),
+            )
+            return int(cursor.lastrowid)
+
+    def list_task_proposals(self, status: str | None = None) -> list[dict[str, Any]]:
+        query = """SELECT task_proposals.*, projects.name AS project_name,
+                          tasks.title AS approved_task_title
+                   FROM task_proposals
+                   JOIN projects ON projects.id = task_proposals.project_id
+                   LEFT JOIN tasks ON tasks.id = task_proposals.approved_task_id"""
+        values: tuple[Any, ...] = ()
+        if status is not None:
+            if status not in {"pending", "approved", "rejected"}:
+                raise ValueError("Invalid task proposal status.")
+            query += " WHERE task_proposals.status = ?"
+            values = (status,)
+        query += " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, id DESC"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, values)]
+
+    def approve_task_proposal(self, proposal_id: int) -> int:
+        with self._connect() as connection:
+            proposal = connection.execute(
+                "SELECT * FROM task_proposals WHERE id = ?", (proposal_id,)
+            ).fetchone()
+            if proposal is None:
+                raise ValueError(f"Task proposal {proposal_id} does not exist.")
+            if proposal["status"] != "pending":
+                raise ValueError("Only pending task proposals can be approved.")
+            cursor = connection.execute(
+                """INSERT INTO tasks (project_id, title, priority, due_date)
+                   VALUES (?, ?, ?, ?)""",
+                (proposal["project_id"], proposal["title"], proposal["priority"], proposal["due_date"]),
+            )
+            task_id = int(cursor.lastrowid)
+            connection.execute(
+                """UPDATE task_proposals SET status = 'approved',
+                   approved_task_id = ?, decided_at = ? WHERE id = ?""",
+                (task_id, datetime.now().isoformat(timespec="seconds"), proposal_id),
+            )
+            return task_id
+
+    def reject_task_proposal(self, proposal_id: int) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE task_proposals SET status = 'rejected',
+                   decided_at = ? WHERE id = ? AND status = 'pending'""",
+                (datetime.now().isoformat(timespec="seconds"), proposal_id),
+            )
+            if cursor.rowcount == 0:
+                exists = connection.execute(
+                    "SELECT 1 FROM task_proposals WHERE id = ?", (proposal_id,)
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"Task proposal {proposal_id} does not exist.")
+                raise ValueError("Only pending task proposals can be rejected.")
 
     def add_recurring_task(
         self, project_id: int, title: str, priority: int = 3,
@@ -973,6 +1069,7 @@ class SageStore:
             "recent_decisions": self.list_decisions(15),
             "recent_resource_entries": self.list_resource_entries(limit=30),
             "recurring_tasks": self.list_recurring_tasks()[:30],
+            "pending_task_proposals": self.list_task_proposals("pending")[:30],
         }
 
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -1009,17 +1106,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4}:
+        if version not in {1, 2, 3, 4, 5}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks"}:
+            if table not in data and version in {1, 2, 3, 4} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1189,7 +1286,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 4,
+                "version": 5,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
