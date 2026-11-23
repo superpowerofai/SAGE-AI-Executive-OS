@@ -52,7 +52,7 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert payload["format"] == "sage-export"
-    assert payload["version"] == 1
+    assert payload["version"] == 2
     assert payload["data"]["projects"][0]["name"] == "घर का काम"
     assert len(payload["data"]["tasks"]) == 1
     assert len(payload["data"]["daily_reviews"]) == 1
@@ -102,3 +102,55 @@ def test_restore_rejects_invalid_database_without_changing_active_data(tmp_path)
         assert "integrity" in str(error).lower() or "file is not a database" in str(error).lower()
 
     assert [p["name"] for p in store.list_projects()] == ["Keep this"]
+
+
+def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(tmp_path):
+    source_store = SageStore(tmp_path / "source.db")
+    venture = source_store.add_venture("ABSE.INC", monthly_budget_cap=8000)
+    project = source_store.add_project("Marketplace", venture_id=venture)
+    source_store.add_task(project, "Validate first seller", priority=1)
+    source_store.log_resource(venture, "expense", 300, project_id=project, note="Domain")
+    export_path = source_store.export_data(tmp_path / "portable.json")
+
+    restored = SageStore(tmp_path / "restored.db")
+    counts = restored.import_data(export_path)
+    assert counts["ventures"] == 1
+    assert counts["projects"] == 1
+    assert counts["tasks"] == 1
+    assert counts["resource_entries"] == 1
+    assert restored.list_ventures()[0]["name"] == "ABSE.INC"
+    assert restored.list_projects()[0]["name"] == "Marketplace"
+    assert restored.list_resource_entries()[0]["note"] == "Domain"
+
+
+def test_json_import_supports_legacy_v1_exports(tmp_path):
+    import json
+
+    source_store = SageStore(tmp_path / "legacy-source.db")
+    source_store.add_project("Old export project")
+    export_path = source_store.export_data(tmp_path / "legacy.json")
+    payload = json.loads(export_path.read_text(encoding="utf-8"))
+    payload["version"] = 1
+    payload["data"].pop("ventures")
+    payload["data"].pop("resource_entries")
+    export_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    restored = SageStore(tmp_path / "legacy-target.db")
+    restored.import_data(export_path)
+    assert restored.list_projects()[0]["name"] == "Old export project"
+    assert restored.list_ventures() == []
+
+
+def test_json_import_refuses_to_merge_into_nonempty_database(tmp_path):
+    source = SageStore(tmp_path / "import-source.db")
+    source.add_project("Incoming")
+    export_path = source.export_data(tmp_path / "incoming.json")
+    target = SageStore(tmp_path / "import-target.db")
+    target.add_project("Existing")
+
+    try:
+        target.import_data(export_path)
+        assert False, "import into a non-empty database must fail"
+    except ValueError as error:
+        assert "empty SAGE database" in str(error)
+    assert [project["name"] for project in target.list_projects()] == ["Existing"]
