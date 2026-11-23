@@ -55,7 +55,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{e('; '.join(v['allocation_data_gaps']) or 'No identified data gaps')}</td>"
         f"<td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
-    ) or "<tr><td colspan='17'>No ventures registered yet.</td></tr>"
+    ) or "<tr><td colspan='20'>No ventures registered yet.</td></tr>"
     recurring_obligation_rows = "".join(
         f"<tr><td>#{rule['id']}</td><td>{e(rule['venture_name'])}</td><td>{e(rule['obligation_type'])}</td>"
         f"<td>INR {rule['amount']:,.2f}</td><td>{e(rule['description'])}</td>"
