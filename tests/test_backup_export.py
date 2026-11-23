@@ -46,6 +46,8 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     store.save_review(priority="आज का लक्ष्य")
     store.add_decision("निर्णय", "आगे बढ़ें")
     store.add_blocker("रुकावट")
+    venture = store.add_venture("नया व्यवसाय")
+    store.log_resource(venture, "expense", 125)
     path = store.export_data(tmp_path / "export.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
 
@@ -56,6 +58,8 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     assert len(payload["data"]["daily_reviews"]) == 1
     assert len(payload["data"]["decisions"]) == 1
     assert len(payload["data"]["blockers"]) == 1
+    assert len(payload["data"]["ventures"]) == 1
+    assert len(payload["data"]["resource_entries"]) == 1
 
 
 def test_json_export_refuses_overwrite(tmp_path):
