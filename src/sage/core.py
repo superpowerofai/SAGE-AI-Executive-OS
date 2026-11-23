@@ -835,6 +835,7 @@ class SageStore:
             "as_of": date.today().isoformat(),
             "portfolio": self.portfolio_summary(),
             "projects": self.list_projects(),
+            "project_next_actions": self.project_next_actions(),
             "tasks": self.list_tasks()[:60],
             "open_blockers": self.list_blockers("open")[:25],
             "recent_reviews": self.list_reviews(7),
