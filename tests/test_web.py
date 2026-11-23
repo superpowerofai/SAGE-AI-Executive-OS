@@ -127,3 +127,36 @@ def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
     with pytest.raises(ValueError, match="localhost only"):
         serve(SageStore(tmp_path / "web.db"), "0.0.0.0", 8765)
+
+
+def test_web_cockpit_rejects_cross_origin_mutations(tmp_path):
+    db = tmp_path / "csrf.db"
+    store = SageStore(db)
+    port = _free_port()
+    thread = Thread(target=serve, args=(store, "127.0.0.1", port), daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{port}"
+    for _ in range(50):
+        try:
+            with urlopen(url, timeout=0.2):
+                break
+        except OSError:
+            sleep(0.02)
+    else:
+        raise AssertionError("Local SAGE server did not start")
+
+    request = Request(
+        url + "/add-project",
+        data=b"name=Injected",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://malicious.example",
+        },
+        method="POST",
+    )
+    try:
+        urlopen(request, timeout=2)
+        assert False, "cross-origin request should be rejected"
+    except HTTPError as error:
+        assert error.code == 403
+    assert store.list_projects() == []
