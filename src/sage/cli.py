@@ -140,6 +140,8 @@ def build_parser() -> argparse.ArgumentParser:
     export_json = commands.add_parser("export-json", help="Export all SAGE data as portable JSON")
     export_json.add_argument("destination", help="JSON output file path")
     export_json.add_argument("--force", action="store_true", help="Replace an existing destination")
+    import_json = commands.add_parser("import-json", help="Import a SAGE JSON export into an empty database")
+    import_json.add_argument("source", help="JSON export file")
 
     restore = commands.add_parser("restore", help="Restore a verified SQLite backup")
     restore.add_argument("source", help="Backup database file to restore")
@@ -472,6 +474,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "export-json":
             destination = store.export_data(args.destination, overwrite=args.force)
             print(f"JSON export created: {destination}")
+        elif args.command == "import-json":
+            imported = store.import_data(args.source)
+            print("SAGE JSON IMPORT COMPLETE")
+            for table, count in imported.items():
+                print(f"  {table}: {count}")
         elif args.command == "restore":
             if not args.yes:
                 raise ValueError("Restore replaces the active database. Re-run with --yes to confirm.")
