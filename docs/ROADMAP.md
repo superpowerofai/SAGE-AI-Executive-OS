@@ -27,6 +27,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Integrity-checked SQLite backup, versioned JSON export/import and confirmed restore with pre-restore safety copy (CI-verified)
 - [x] Venture portfolio registry, project ownership, strategic priority and optional resource caps (CI-verified)
 - [x] Actual income, expense and time logging with monthly cash-flow and weekly cap usage summaries (CI-verified)
+- [x] Receivable/payable obligations, 30-day due forecast and settlement-to-ledger posting (CI-verified)
 - [x] Recurring daily/weekly/monthly task rules with bounded on-demand generation (CI-verified)
 - [x] One-way iCalendar export for open dated tasks (CI-verified)
 - [ ] Desktop notifications and automatic scheduled recurring-task generation
