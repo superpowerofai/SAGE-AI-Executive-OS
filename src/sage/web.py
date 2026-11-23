@@ -17,6 +17,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     proposals = store.list_task_proposals()
     obligations = store.list_obligations()
     recurring_obligations = store.list_recurring_obligations()
+    cash_positions = store.list_cash_positions()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -45,10 +46,12 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>₹{v['month_net_cash_flow']:,.2f}</td>"
         f"<td>₹{v['open_receivables']:,.2f}</td><td>₹{v['open_payables']:,.2f}</td>"
         f"<td>₹{v['expected_obligation_cashflow_30d']:,.2f}</td>"
+        f"<td>{'Not set' if v['estimated_cash_balance'] is None else '₹' + format(v['estimated_cash_balance'], ',.2f')}</td>"
+        f"<td>{'Not set' if v['forecast_cash_balance_30d'] is None else '₹' + format(v['forecast_cash_balance_30d'], ',.2f')}</td>"
         f"<td>{str(v['weekly_hours_cap']) if v['weekly_hours_cap'] is not None else 'Not set'}</td>"
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
-    ) or "<tr><td colspan='15'>No ventures registered yet.</td></tr>"
+    ) or "<tr><td colspan='17'>No ventures registered yet.</td></tr>"
     recurring_obligation_rows = "".join(
         f"<tr><td>#{rule['id']}</td><td>{e(rule['venture_name'])}</td><td>{e(rule['obligation_type'])}</td>"
         f"<td>INR {rule['amount']:,.2f}</td><td>{e(rule['description'])}</td>"
@@ -166,7 +169,8 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <form method='post' action='/generate-recurring'><button>Generate due tasks</button></form></section>
 <section><h2>ONE ACTION PER ACTIVE PROJECT</h2><ul>{project_action_rows}</ul></section>
 <section><h2>VENTURE PORTFOLIO</h2><p>Resource caps are optional planning inputs you enter; SAGE does not infer budgets or available hours.</p>
-<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Income this month (₹)</th><th>Expenses this month (₹)</th><th>Net this month (₹)</th><th>Open receivables (₹)</th><th>Open payables (₹)</th><th>30-day obligation net (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th><th>Allocation signal</th></tr>{venture_rows}</table></div>
+<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Income this month (₹)</th><th>Expenses this month (₹)</th><th>Net this month (₹)</th><th>Open receivables (₹)</th><th>Open payables (₹)</th><th>30-day obligation net (₹)</th><th>Estimated cash (₹)</th><th>30-day cash forecast (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th><th>Allocation signal</th></tr>{venture_rows}</table></div>
+<form method='post' action='/set-cash-position'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><input name='opening_balance' type='number' step='0.01' placeholder='Verified opening cash INR' required><input name='as_of_date' type='date' required><input name='note' placeholder='Source / account note'><button>Set cash position</button></form>
 <form method='post' action='/add-venture'><input name='name' placeholder='New venture name' required><input name='description' placeholder='Description'><input name='monthly_budget_cap' type='number' min='0' step='0.01' placeholder='Monthly budget cap ₹'><input name='weekly_hours_cap' type='number' min='0' step='0.5' placeholder='Weekly hours cap'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><button>Add venture</button></form>
 <form method='post' action='/log-resource'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='entry_type'><option value='expense'>Expense (₹)</option><option value='income'>Income (₹)</option><option value='time'>Time (hours)</option></select><input name='quantity' type='number' min='0.01' step='0.01' placeholder='Amount / hours' required><input name='note' placeholder='What was spent / worked on'><button>Log resource</button></form>
 <h3>Recent resource entries</h3><ul>{resource_rows}</ul></section>
@@ -243,7 +247,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/set-cash-position", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -265,6 +269,12 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/set-cash-position":
+                    store.set_cash_position(
+                        int(data["venture_id"]), float(data.get("opening_balance", "0")),
+                        data.get("as_of_date", ""), data.get("note", ""),
+                    )
+                    notice = "Manual cash position saved. Forecast uses only recorded obligations."
                 elif path == "/add-recurring-obligation":
                     store.add_recurring_obligation(
                         int(data["venture_id"]), data.get("obligation_type", "payable"),
