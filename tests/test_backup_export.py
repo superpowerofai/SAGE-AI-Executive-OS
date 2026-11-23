@@ -71,3 +71,34 @@ def test_json_export_refuses_overwrite(tmp_path):
         assert False, "expected overwrite protection"
     except ValueError as error:
         assert "already exists" in str(error)
+
+
+def test_restore_backup_preserves_current_database_and_restores_snapshot(tmp_path):
+    store = SageStore(tmp_path / "active.db")
+    store.add_project("Before backup")
+    backup = store.backup(tmp_path / "safe-copy.db")
+    store.add_project("After backup")
+
+    safety_copy = store.restore_backup(backup)
+    assert safety_copy is not None and safety_copy.exists()
+    assert [p["name"] for p in store.list_projects()] == ["Before backup"]
+
+    preserved = SageStore(safety_copy)
+    assert [p["name"] for p in preserved.list_projects()] == [
+        "Before backup", "After backup"
+    ]
+
+
+def test_restore_rejects_invalid_database_without_changing_active_data(tmp_path):
+    store = SageStore(tmp_path / "active.db")
+    store.add_project("Keep this")
+    invalid = tmp_path / "not-sage.db"
+    invalid.write_text("not a database", encoding="utf-8")
+
+    try:
+        store.restore_backup(invalid)
+        assert False, "invalid backup should be rejected"
+    except Exception as error:
+        assert "integrity" in str(error).lower() or "file is not a database" in str(error).lower()
+
+    assert [p["name"] for p in store.list_projects()] == ["Keep this"]
