@@ -54,6 +54,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 - [x] Windows one-click launcher and desktop shortcut
 - [x] Local Ollama connection with context preview and explicit consent
+- [x] Persistent local context notes included in AI context (CI-verified)
 - [x] Local-only HTTP cockpit with Host/Origin checks and security headers
 - [ ] User authentication, multi-device sync and hosted deployment
 - [ ] Two-way calendar and email integrations
