@@ -171,6 +171,29 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
         assert error.code == 400
     assert received["goal"] == "Choose the next step"
 
+    from datetime import date
+    add_recurring_request = Request(
+        url + "/add-recurring",
+        data=f"project_id=1&title=Daily%20pipeline%20review&frequency=daily&every=1&priority=1&start_date={date.today().isoformat()}".encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(add_recurring_request, timeout=2) as response:
+        recurring_page = response.read().decode()
+    assert "Recurring task rule created." in recurring_page
+    assert len(store.list_recurring_tasks()) == 1
+
+    generate_request = Request(
+        url + "/generate-recurring",
+        data=b"",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(generate_request, timeout=2) as response:
+        generated_page = response.read().decode()
+    assert "Generated 1 recurring task(s)." in generated_page
+    assert any(task["title"] == "Daily pipeline review" for task in store.list_tasks())
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
