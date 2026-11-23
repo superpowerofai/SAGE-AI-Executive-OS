@@ -93,6 +93,10 @@ def build_parser() -> argparse.ArgumentParser:
     approve_action.add_argument("request_id", type=int)
     reject_action = commands.add_parser("reject-action", help="Reject a queued action request")
     reject_action.add_argument("request_id", type=int)
+    import_ics = commands.add_parser("import-ics", help="Import calendar events as pending task proposals")
+    import_ics.add_argument("source")
+    import_ics.add_argument("--project-id", type=int, required=True)
+    import_ics.add_argument("--limit", type=int, default=100)
 
     add_obligation = commands.add_parser("add-obligation", help="Record a receivable or payable")
     add_obligation.add_argument("venture_id", type=int)
@@ -604,6 +608,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "reject-action":
             store.reject_action_request(args.request_id)
             print(f"Rejected action request #{args.request_id}. No action was executed.")
+        elif args.command == "import-ics":
+            from .calendar_io import import_icalendar_proposals
+            result = import_icalendar_proposals(store, args.source, args.project_id, args.limit)
+            print("SAGE CALENDAR IMPORT — PENDING TASK PROPOSALS ONLY")
+            print(f"Created: {result['created']} | Duplicates ignored: {result['duplicates']} | Skipped: {result['skipped']}")
+            print("Review each item with 'sage proposals' and approve individually.")
         elif args.command == "add-obligation":
             obligation_id = store.add_obligation(
                 args.venture_id, args.obligation_type, args.amount, args.due_date,

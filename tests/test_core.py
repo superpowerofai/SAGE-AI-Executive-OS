@@ -94,3 +94,24 @@ def test_store_creates_missing_database_parent_directories(tmp_path):
     project_id = store.add_project("Nested database")
     assert database.exists()
     assert store.list_projects()[0]["id"] == project_id
+
+
+def test_existing_task_proposal_table_is_migrated_with_source_uid(tmp_path):
+    import sqlite3
+
+    database = tmp_path / "legacy-schema.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE task_proposals (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, "
+        "title TEXT NOT NULL, rationale TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL DEFAULT 3, "
+        "due_date TEXT, status TEXT NOT NULL DEFAULT 'pending', approved_task_id INTEGER, "
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, decided_at TEXT)"
+    )
+    connection.commit()
+    connection.close()
+
+    SageStore(database)
+    connection = sqlite3.connect(database)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(task_proposals)")}
+    connection.close()
+    assert "source_uid" in columns

@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS task_proposals (
     rationale TEXT NOT NULL DEFAULT '',
     priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
     due_date TEXT,
+    source_uid TEXT UNIQUE,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     approved_task_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -225,6 +226,15 @@ class SageStore:
                     "ALTER TABLE projects ADD COLUMN venture_id INTEGER "
                     "REFERENCES ventures(id) ON DELETE SET NULL"
                 )
+            proposal_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(task_proposals)")
+            }
+            if "source_uid" not in proposal_columns:
+                connection.execute("ALTER TABLE task_proposals ADD COLUMN source_uid TEXT")
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_proposals_source_uid "
+                "ON task_proposals(source_uid) WHERE source_uid IS NOT NULL"
+            )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1092,6 +1102,7 @@ class SageStore:
     def create_task_proposal(
         self, project_id: int, title: str, rationale: str = "",
         priority: int = 3, due_date: str | None = None,
+        source_uid: str | None = None,
     ) -> int:
         title = title.strip()
         if not title:
@@ -1108,11 +1119,17 @@ class SageStore:
                 "SELECT 1 FROM projects WHERE id = ?", (project_id,)
             ).fetchone() is None:
                 raise ValueError(f"Project {project_id} does not exist.")
+            if source_uid:
+                existing = connection.execute(
+                    "SELECT id FROM task_proposals WHERE source_uid = ?", (source_uid,)
+                ).fetchone()
+                if existing is not None:
+                    return int(existing["id"])
             cursor = connection.execute(
                 """INSERT INTO task_proposals
-                   (project_id, title, rationale, priority, due_date)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (project_id, title, rationale.strip(), priority, due_date),
+                   (project_id, title, rationale, priority, due_date, source_uid)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (project_id, title, rationale.strip(), priority, due_date, source_uid),
             )
             return int(cursor.lastrowid)
 
@@ -1691,7 +1708,7 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}:
+        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
@@ -1871,7 +1888,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 10,
+                "version": 11,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(

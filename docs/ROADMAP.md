@@ -51,7 +51,8 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Evidence-only daily executive briefing in CLI and local cockpit; one master action, project actions, risks and missing inputs (84 local tests passing)
 - [x] Optional AI interpretation of the daily briefing with explicit context-transmission approval (unit-tested; local Qwen3 endpoint smoke-tested end-to-end using synthetic records only)
 - [x] Human approval queue for task proposals; approval creates the task, rejection records the decision (CI-verified)
-- [x] Approval-gated action registry with explicit pending/executing/executed/rejected/failed states, allow-listed calendar-export adapter, path validation, no-overwrite behavior, duplicate-execution prevention, and JSON backup/restore compatibility (97 local tests passing)
+- [x] Approval-gated action registry with explicit pending/executing/executed/rejected/failed states, allow-listed calendar-export adapter, path validation, no-overwrite behavior, duplicate-execution prevention, and JSON backup/restore compatibility (102 local tests passing)
+- [x] File-based iCalendar import into deduplicated, pending task proposals; recurring, cancelled and undated events are skipped; imported tasks still require individual human approval (102 local tests passing)
 - [ ] Approval gates for external email/calendar API actions and automated workflows
 
 ## v0.5 â€” Local desktop operations

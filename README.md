@@ -37,6 +37,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Generate an offline, evidence-only daily executive briefing with one master next action, one action per active project, overdue work, blockers, pending approvals, recorded financial risks, and explicit data gaps. The same briefing appears in the local cockpit.
 - Optionally add an AI interpretation to the daily briefing using an OpenAI-compatible endpoint; context transmission still requires explicit approval. SAGE never lets the model mutate records.
 - Queue allow-listed local actions for explicit approval. The first action adapter exports dated open tasks to an `.ics` file under `exports/`; it validates filenames, never overwrites an existing file, records execution outcomes, and blocks replay. External email/calendar API calls and payments are not enabled.
+- Import `.ics` calendar events into a selected project as pending task proposals. SAGE skips recurring, cancelled and undated events, deduplicates repeated imports, and never creates tasks until each proposal is approved.
 
 ## Requirements
 
@@ -164,6 +165,8 @@ sage request-calendar-export --filename week.ics
 sage actions
 sage approve-action 1
 sage reject-action 2
+sage import-ics calendar.ics --project-id 1
+sage proposals --status pending
 sage suggest "What should receive my next focused work block?" --send-context
 ```
 
