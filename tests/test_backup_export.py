@@ -48,11 +48,12 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     store.add_blocker("रुकावट")
     venture = store.add_venture("नया व्यवसाय")
     store.log_resource(venture, "expense", 125)
+    store.log_income(venture, 500)
     path = store.export_data(tmp_path / "export.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert payload["format"] == "sage-export"
-    assert payload["version"] == 2
+    assert payload["version"] == 3
     assert payload["data"]["projects"][0]["name"] == "घर का काम"
     assert len(payload["data"]["tasks"]) == 1
     assert len(payload["data"]["daily_reviews"]) == 1
@@ -60,6 +61,7 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     assert len(payload["data"]["blockers"]) == 1
     assert len(payload["data"]["ventures"]) == 1
     assert len(payload["data"]["resource_entries"]) == 1
+    assert len(payload["data"]["income_entries"]) == 1
 
 
 def test_json_export_refuses_overwrite(tmp_path):
@@ -110,6 +112,7 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     project = source_store.add_project("Marketplace", venture_id=venture)
     source_store.add_task(project, "Validate first seller", priority=1)
     source_store.log_resource(venture, "expense", 300, project_id=project, note="Domain")
+    source_store.log_income(venture, 1500, project_id=project, note="Client payment")
     export_path = source_store.export_data(tmp_path / "portable.json")
 
     restored = SageStore(tmp_path / "restored.db")
@@ -118,9 +121,10 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     assert counts["projects"] == 1
     assert counts["tasks"] == 1
     assert counts["resource_entries"] == 1
+    assert counts["income_entries"] == 1
     assert restored.list_ventures()[0]["name"] == "ABSE.INC"
     assert restored.list_projects()[0]["name"] == "Marketplace"
-    assert restored.list_resource_entries()[0]["note"] == "Domain"
+    assert {entry["note"] for entry in restored.list_resource_entries()} == {"Domain", "Client payment"}
 
 
 def test_json_import_supports_legacy_v1_exports(tmp_path):
