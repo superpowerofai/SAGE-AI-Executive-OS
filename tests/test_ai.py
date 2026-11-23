@@ -55,6 +55,8 @@ def test_context_preview_and_ai_suggestion_use_read_only_snapshot(tmp_path):
     assert "OPERONIX AI" in preview
     assert "Lead automation" in preview
     assert "Contact first lead" in preview
+    store.add_context_note("Operating rule", "Never invent business numbers.")
+    assert "Never invent business numbers" in preview_context(store)
 
     captured = {}
     def fake_complete(self, messages):
