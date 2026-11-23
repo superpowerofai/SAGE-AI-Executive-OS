@@ -12,7 +12,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] CLI workflow tests
 - [x] `python -m sage` entry point
 - [x] GitHub Actions matrix for Python 3.10, 3.11, 3.12 and 3.13
-- [x] Confirm a successful clean CI run across the matrix (run 45096052139)
+- [x] Confirm a successful clean CI run across the matrix (run 45096735043)
 
 ## v0.2 — Usability
 
@@ -49,7 +49,11 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 ## v0.5 — Local desktop operations
 
-- [x] Windows one-click launcher and desktop shortcut\n- [x] Local Ollama connection with context preview and explicit consent\n- [x] Local-only HTTP cockpit with Host/Origin checks and security headers\n- [ ] User authentication, multi-device sync and hosted deployment\n- [ ] Two-way calendar and email integrations
+- [x] Windows one-click launcher and desktop shortcut
+- [x] Local Ollama connection with context preview and explicit consent
+- [x] Local-only HTTP cockpit with Host/Origin checks and security headers
+- [ ] User authentication, multi-device sync and hosted deployment
+- [ ] Two-way calendar and email integrations
 
 ## Release discipline
 
