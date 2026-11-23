@@ -194,6 +194,28 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Generated 1 recurring task(s)." in generated_page
     assert any(task["title"] == "Daily pipeline review" for task in store.list_tasks())
 
+    proposal_request = Request(
+        url + "/propose-task",
+        data=b"project_id=1&title=Proposed%20follow-up&rationale=Revenue%20action&priority=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(proposal_request, timeout=2) as response:
+        proposal_page = response.read().decode()
+    assert "Task proposal submitted for approval." in proposal_page
+    assert len(store.list_task_proposals("pending")) == 1
+
+    approve_request = Request(
+        url + "/approve-proposal",
+        data=b"id=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(approve_request, timeout=2) as response:
+        approved_page = response.read().decode()
+    assert "Proposal approved. Task" in approved_page
+    assert any(task["title"] == "Proposed follow-up" for task in store.list_tasks())
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
