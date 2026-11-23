@@ -116,7 +116,7 @@ def generate_suggestion(
         {
             "role": "user",
             "content": (
-                "USER GOAL:\\n" + goal + "\\n\\nSAGE CONTEXT PREVIEW:\\n" + context
+                "USER GOAL:\n" + goal + "\n\nSAGE CONTEXT PREVIEW:\n" + context
             ),
         },
     ]
