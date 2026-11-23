@@ -746,9 +746,12 @@ class SageStore:
         self, venture_id: int, opening_balance: float,
         as_of_date: str, note: str = "",
     ) -> None:
-        value = self._optional_nonnegative_number(opening_balance, "Opening cash balance")
-        if value is None:
-            raise ValueError("Opening cash balance must be a finite number.")
+        try:
+            value = float(opening_balance)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Opening cash balance must be numeric.") from error
+        if not math.isfinite(value):
+            raise ValueError("Opening cash balance must be finite.")
         try:
             date.fromisoformat(as_of_date)
         except ValueError as error:
