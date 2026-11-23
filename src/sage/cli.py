@@ -118,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     generate_obligations = commands.add_parser("generate-recurring-obligations", help="Generate due receivable/payable records")
     generate_obligations.add_argument("--through")
     generate_obligations.add_argument("--limit", type=int, default=100)
+    cash_position = commands.add_parser("set-cash-position", help="Set a venture's manually verified opening cash balance")
+    cash_position.add_argument("venture_id", type=int)
+    cash_position.add_argument("opening_balance", type=float)
+    cash_position.add_argument("as_of_date")
+    cash_position.add_argument("--note", default="")
+    commands.add_parser("cash-positions", help="List manually entered venture cash positions")
     generate_recurring = commands.add_parser("generate-recurring", help="Create due recurring task instances")
     generate_recurring.add_argument("--through", help="Generate occurrences due through YYYY-MM-DD")
     generate_recurring.add_argument("--limit", type=int, default=100)
@@ -459,7 +465,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"{budget_left}; {hours_left}; "
                     f"open receivables INR {venture['open_receivables']:,.2f}; "
                     f"open payables INR {venture['open_payables']:,.2f}; "
-                    f"30-day expected obligations net INR {venture['expected_obligation_cashflow_30d']:,.2f}"
+                    f"30-day expected obligations net INR {venture['expected_obligation_cashflow_30d']:,.2f}; "
+                    f"estimated cash {'unknown' if venture['estimated_cash_balance'] is None else 'INR ' + format(venture['estimated_cash_balance'], ',.2f')}; "
+                    f"30-day cash forecast {'unknown' if venture['forecast_cash_balance_30d'] is None else 'INR ' + format(venture['forecast_cash_balance_30d'], ',.2f')}"
                 )
                 print(f"  Allocation signal — {venture['allocation_signal']}")
         elif args.command in {"log-expense", "log-income", "log-time"}:
@@ -604,6 +612,19 @@ def main(argv: list[str] | None = None) -> int:
                     f"  #{item['obligation_id']} {item['obligation_type']} "
                     f"INR {item['amount']:,.2f} due {item['due_date']} "
                     f"| {item['venture_name']} | {item['description']}"
+                )
+        elif args.command == "set-cash-position":
+            store.set_cash_position(
+                args.venture_id, args.opening_balance, args.as_of_date, args.note
+            )
+            print(f"Cash position saved for venture #{args.venture_id} as of {args.as_of_date}.")
+        elif args.command == "cash-positions":
+            positions = store.list_cash_positions()
+            print(f"SAGE CASH POSITIONS ({len(positions)})")
+            for position in positions:
+                print(
+                    f"{position['venture_name']}: INR {position['opening_balance']:,.2f} "
+                    f"as of {position['as_of_date']} | {position['note']}"
                 )
         elif args.command == "generate-recurring":
             through = date.fromisoformat(args.through) if args.through else None
