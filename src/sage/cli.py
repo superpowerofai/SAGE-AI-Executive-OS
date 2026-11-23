@@ -85,6 +85,22 @@ def build_parser() -> argparse.ArgumentParser:
     approve.add_argument("proposal_id", type=int)
     reject = commands.add_parser("reject-proposal", help="Reject a pending task proposal")
     reject.add_argument("proposal_id", type=int)
+
+    add_obligation = commands.add_parser("add-obligation", help="Record a receivable or payable")
+    add_obligation.add_argument("venture_id", type=int)
+    add_obligation.add_argument("obligation_type", choices=["receivable", "payable"])
+    add_obligation.add_argument("amount", type=float)
+    add_obligation.add_argument("due_date")
+    add_obligation.add_argument("description")
+    add_obligation.add_argument("--project-id", type=int)
+    obligations = commands.add_parser("obligations", help="List receivables and payables")
+    obligations.add_argument("--status", choices=["open", "settled", "cancelled"])
+    obligations.add_argument("--venture-id", type=int)
+    settle = commands.add_parser("settle-obligation", help="Settle an obligation and post the actual ledger entry")
+    settle.add_argument("obligation_id", type=int)
+    settle.add_argument("--date", dest="settled_date")
+    cancel = commands.add_parser("cancel-obligation", help="Cancel an open obligation")
+    cancel.add_argument("obligation_id", type=int)
     generate_recurring = commands.add_parser("generate-recurring", help="Create due recurring task instances")
     generate_recurring.add_argument("--through", help="Generate occurrences due through YYYY-MM-DD")
     generate_recurring.add_argument("--limit", type=int, default=100)
@@ -423,7 +439,10 @@ def main(argv: list[str] | None = None) -> int:
                     f"INR {venture['month_spend']:,.2f} expenses, "
                     f"INR {venture['month_net_cash_flow']:,.2f} net this month; "
                     f"{venture['week_hours_used']:g} hours logged this week; "
-                    f"{budget_left}; {hours_left}"
+                    f"{budget_left}; {hours_left}; "
+                    f"open receivables INR {venture['open_receivables']:,.2f}; "
+                    f"open payables INR {venture['open_payables']:,.2f}; "
+                    f"30-day expected obligations net INR {venture['expected_obligation_cashflow_30d']:,.2f}"
                 )
                 print(f"  Allocation signal — {venture['allocation_signal']}")
         elif args.command in {"log-expense", "log-income", "log-time"}:
@@ -517,6 +536,29 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "reject-proposal":
             store.reject_task_proposal(args.proposal_id)
             print(f"Rejected proposal #{args.proposal_id}.")
+        elif args.command == "add-obligation":
+            obligation_id = store.add_obligation(
+                args.venture_id, args.obligation_type, args.amount, args.due_date,
+                args.description, args.project_id,
+            )
+            print(f"Created {args.obligation_type} obligation #{obligation_id}.")
+        elif args.command == "obligations":
+            entries = store.list_obligations(args.status, args.venture_id)
+            print(f"SAGE FINANCIAL OBLIGATIONS ({len(entries)})")
+            for item in entries:
+                print(
+                    f"#{item['id']} [{item['status']}] {item['obligation_type']} "
+                    f"INR {item['amount']:,.2f} due {item['due_date']} "
+                    f"| {item['venture_name']} | {item['description']}"
+                )
+        elif args.command == "settle-obligation":
+            ledger_id = store.settle_obligation(args.obligation_id, args.settled_date)
+            print(
+                f"Settled obligation #{args.obligation_id}; posted actual ledger entry #{ledger_id}."
+            )
+        elif args.command == "cancel-obligation":
+            store.cancel_obligation(args.obligation_id)
+            print(f"Cancelled obligation #{args.obligation_id}.")
         elif args.command == "generate-recurring":
             through = date.fromisoformat(args.through) if args.through else None
             generated = store.generate_recurring_tasks(through, args.limit)
