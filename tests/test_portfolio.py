@@ -164,3 +164,22 @@ def test_income_ledger_calculates_monthly_net_cash_flow(tmp_path):
     assert summary["month_net_cash_flow"] == 11500
     entries = store.list_resource_entries(venture)
     assert {entry["entry_type"] for entry in entries} == {"income", "expense"}
+
+
+def test_project_next_actions_selects_one_per_active_project(tmp_path):
+    store = SageStore(tmp_path / "daily-actions.db")
+    venture = store.add_venture("Priority venture", strategic_priority=1)
+    first = store.add_project("First project", venture_id=venture)
+    second = store.add_project("Second project", venture_id=venture)
+    paused = store.add_project("Paused project", venture_id=venture)
+    store.set_project_status(paused, "paused")
+    store.add_task(first, "High priority todo", priority=1)
+    store.add_task(first, "Already in progress", priority=4)
+    store.set_task_status(2, "in_progress")
+
+    actions = store.project_next_actions()
+    assert len(actions) == 2
+    assert actions[0]["project_name"] == "First project"
+    assert actions[0]["task_title"] == "Already in progress"
+    assert actions[1]["project_name"] == "Second project"
+    assert actions[1]["task_id"] is None
