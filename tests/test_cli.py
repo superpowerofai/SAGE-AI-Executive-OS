@@ -59,3 +59,32 @@ def test_cli_focus_shows_active_paused_and_one_next_action(tmp_path, capsys):
     assert "ONE NEXT ACTION:" in output
     assert "Important task" in output
     assert "Paused task" not in output
+
+
+def test_cli_venture_and_resource_tracking(tmp_path, capsys):
+    database = str(tmp_path / "venture.db")
+    assert main(["--db", database, "add-venture", "OPERONIX AI",
+                 "--priority", "1", "--monthly-budget-cap", "20000",
+                 "--weekly-hours-cap", "15"]) == 0
+    assert "Created venture #1" in capsys.readouterr().out
+
+    assert main(["--db", database, "add-project", "Lead system",
+                 "--venture-id", "1"]) == 0
+    capsys.readouterr()
+
+    assert main(["--db", database, "log-expense", "1", "1200",
+                 "--note", "Hosting"]) == 0
+    assert "Recorded expense" in capsys.readouterr().out
+
+    assert main(["--db", database, "log-time", "1", "2.5",
+                 "--note", "Workflow build"]) == 0
+    assert "Recorded time" in capsys.readouterr().out
+
+    assert main(["--db", database, "ventures"]) == 0
+    output = capsys.readouterr().out
+    assert "OPERONIX AI" in output
+    assert "₹1,200.00 spent this month" in output
+    assert "2.5 hours logged this week" in output
+
+    assert main(["--db", database, "resources", "--venture-id", "1"]) == 0
+    assert "Hosting" in capsys.readouterr().out
