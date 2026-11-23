@@ -181,7 +181,7 @@ class SageStore:
             for venture in ventures:
                 row = connection.execute(
                     """SELECT COUNT(DISTINCT p.id) AS projects,
-                              SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) AS active_projects,
+                              COUNT(DISTINCT CASE WHEN p.status = 'active' THEN p.id END) AS active_projects,
                               SUM(CASE WHEN t.status != 'done' THEN 1 ELSE 0 END) AS open_tasks,
                               SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_tasks
                        FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
