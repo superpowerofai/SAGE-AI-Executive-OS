@@ -424,6 +424,21 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "resolve-blocker":
             store.resolve_blocker(args.blocker_id)
             print(f"Resolved blocker #{args.blocker_id}")
+        elif args.command == "backup":
+            destination = store.backup(args.destination, overwrite=args.force)
+            print(f"Database backup created: {destination}")
+        elif args.command == "export-json":
+            destination = store.export_data(args.destination, overwrite=args.force)
+            print(f"JSON export created: {destination}")
+        elif args.command == "restore":
+            if not args.yes:
+                raise ValueError("Restore replaces the active database. Re-run with --yes to confirm.")
+            safety_copy = store.restore_backup(args.source)
+            print(f"Restored database from: {Path(args.source).expanduser().resolve()}")
+            if safety_copy:
+                print(f"Previous database preserved at: {safety_copy}")
+            else:
+                print("No previous database existed; no pre-restore copy was needed.")
         elif args.command == "dashboard":
             _show_dashboard(store)
         elif args.command == "focus":
