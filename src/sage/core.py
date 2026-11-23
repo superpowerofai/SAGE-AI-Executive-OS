@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS resource_entries (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS income_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venture_id INTEGER NOT NULL,
+    project_id INTEGER,
+    amount REAL NOT NULL CHECK (amount > 0),
+    entry_date TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venture_id) REFERENCES ventures(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
 """
 
 
@@ -238,6 +250,39 @@ class SageStore:
             )
             return int(cursor.lastrowid)
 
+
+    def log_income(
+        self, venture_id: int, amount: float, entry_date: str | None = None,
+        project_id: int | None = None, note: str = "",
+    ) -> int:
+        """Record actual income in INR against a venture."""
+        value = self._optional_nonnegative_number(amount, "Income amount")
+        if value is None or value <= 0:
+            raise ValueError("Income amount must be greater than zero.")
+        day = entry_date or date.today().isoformat()
+        try:
+            date.fromisoformat(day)
+        except ValueError as error:
+            raise ValueError("Income date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            if project_id is not None:
+                project = connection.execute(
+                    "SELECT venture_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if project is None or project["venture_id"] != venture_id:
+                    raise ValueError("Linked project must belong to the selected venture.")
+            cursor = connection.execute(
+                """INSERT INTO income_entries
+                   (venture_id, project_id, amount, entry_date, note)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (venture_id, project_id, value, day, note.strip()),
+            )
+            return int(cursor.lastrowid)
+
     def list_resource_entries(
         self, venture_id: int | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
@@ -255,7 +300,24 @@ class SageStore:
         query += " ORDER BY entry_date DESC, id DESC LIMIT ?"
         values += (limit,)
         with self._connect() as connection:
-            return [dict(row) for row in connection.execute(query, values)]
+            entries = [dict(row) for row in connection.execute(query, values)]
+            income_query = """SELECT income_entries.id, income_entries.venture_id,
+                                     income_entries.project_id, 'income' AS entry_type,
+                                     income_entries.amount AS quantity, income_entries.entry_date,
+                                     income_entries.note, income_entries.created_at,
+                                     ventures.name AS venture_name, projects.name AS project_name
+                              FROM income_entries
+                              JOIN ventures ON ventures.id = income_entries.venture_id
+                              LEFT JOIN projects ON projects.id = income_entries.project_id"""
+            income_values: tuple[Any, ...] = ()
+            if venture_id is not None:
+                income_query += " WHERE income_entries.venture_id = ?"
+                income_values = (venture_id,)
+            income_query += " ORDER BY income_entries.entry_date DESC, income_entries.id DESC LIMIT ?"
+            income_values += (limit,)
+            entries.extend(dict(row) for row in connection.execute(income_query, income_values))
+        entries.sort(key=lambda item: (item["entry_date"], item["id"]), reverse=True)
+        return entries[:limit]
 
     def portfolio_summary(self, today: date | None = None) -> dict[str, Any]:
         """Summarize venture ownership and explicitly entered resource caps."""
@@ -286,6 +348,12 @@ class SageStore:
                 ).fetchone()
                 month_spend = float(usage["month_spend"])
                 week_hours = float(usage["week_hours"])
+                income_usage = connection.execute(
+                    """SELECT COALESCE(SUM(amount), 0) FROM income_entries
+                       WHERE venture_id = ? AND entry_date BETWEEN ? AND ?""",
+                    (venture["id"], month_start, as_of.isoformat()),
+                ).fetchone()[0]
+                month_revenue = float(income_usage)
                 budget_cap = venture["monthly_budget_cap"]
                 hours_cap = venture["weekly_hours_cap"]
                 active_projects = int(row["active_projects"] or 0)
@@ -318,6 +386,8 @@ class SageStore:
                     "open_tasks": open_tasks,
                     "in_progress_tasks": int(row["in_progress_tasks"] or 0),
                     "month_spend": month_spend,
+                    "month_revenue": month_revenue,
+                    "month_net_cash_flow": month_revenue - month_spend,
                     "month_budget_remaining": budget_remaining,
                     "week_hours_used": week_hours,
                     "week_hours_remaining": hours_remaining,
@@ -771,7 +841,7 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2}:
+        if version not in {1, 2, 3}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
@@ -781,7 +851,7 @@ class SageStore:
             "decisions", "blockers", "resource_entries",
         )
         for table in tables:
-            if table not in data and version == 1 and table in {"ventures", "resource_entries"}:
+            if table not in data and version in {1, 2} and table in {"ventures", "resource_entries", "income_entries"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -881,11 +951,11 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 2,
+                "version": 3,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
