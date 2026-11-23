@@ -44,3 +44,5 @@ def test_cash_position_validation_and_upsert(tmp_path):
     assert len(positions) == 1
     assert positions[0]["opening_balance"] == 250
     assert positions[0]["note"] == "Updated"
+    store.set_cash_position(venture, -250, "2026-11-24", "Overdraft")
+    assert store.list_cash_positions()[0]["opening_balance"] == -250
