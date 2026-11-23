@@ -14,6 +14,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     resource_entries = store.list_resource_entries(limit=12)
     project_actions = store.project_next_actions()
     recurring_rules = store.list_recurring_tasks()
+    proposals = store.list_task_proposals()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -44,6 +45,15 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='12'>No ventures registered yet.</td></tr>"
+    proposal_rows = "".join(
+        f"<tr><td>#{p['id']}</td><td>{e(p['project_name'])}</td><td>{e(p['title'])}</td>"
+        f"<td>{e(p['rationale'])}</td><td>P{p['priority']}</td><td>{e(p['status'])}</td><td>"
+        + (
+            f"<form method='post' action='/approve-proposal'><input type='hidden' name='id' value='{p['id']}'><button>Approve → create task</button></form>"
+            f"<form method='post' action='/reject-proposal'><input type='hidden' name='id' value='{p['id']}'><button class='secondary'>Reject</button></form>"
+            if p["status"] == "pending" else "—"
+        ) + "</td></tr>" for p in proposals
+    ) or "<tr><td colspan='7'>No task proposals.</td></tr>"
     recurring_rows = "".join(
         f"<tr><td>#{rule['id']}</td><td>{e(rule['project_name'])}</td><td>{e(rule['title'])}</td>"
         f"<td>{e(rule['frequency'])} × {rule['frequency_interval']}</td><td>{e(rule['next_due_date'])}</td>"
@@ -118,6 +128,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>HUMAN APPROVAL QUEUE</h2><p>Proposed tasks do not enter the execution plan until you approve them. Approval creates the task; rejection records the decision.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Proposed task</th><th>Rationale</th><th>Priority</th><th>Status</th><th>Decision</th></tr>{proposal_rows}</table></div>
+<form method='post' action='/propose-task'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects)}</select><input name='title' placeholder='Proposed next task' required><input name='rationale' placeholder='Why this task?'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='due_date' type='date'><button>Submit for approval</button></form></section>
 <section><h2>RECURRING TASKS</h2><p>Rules generate dated task instances only when you press Generate due tasks. Generation is bounded to 100 instances per request.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Task</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_rows}</table></div>
 <form method='post' action='/add-recurring'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects if p['status'] == 'active')}</select><input name='title' placeholder='Recurring task' required><select name='frequency'><option>daily</option><option selected>weekly</option><option>monthly</option></select><input name='every' type='number' min='1' max='365' value='1' title='Repeat every N units'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='start_date' type='date'><button>Add recurring rule</button></form>
@@ -201,7 +214,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -223,6 +236,19 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/propose-task":
+                    store.create_task_proposal(
+                        int(data["project_id"]), data.get("title", ""),
+                        data.get("rationale", ""), int(data.get("priority", "3")),
+                        data.get("due_date") or None,
+                    )
+                    notice = "Task proposal submitted for approval."
+                elif path == "/approve-proposal":
+                    task_id = store.approve_task_proposal(int(data["id"]))
+                    notice = f"Proposal approved. Task #{task_id} created."
+                elif path == "/reject-proposal":
+                    store.reject_task_proposal(int(data["id"]))
+                    notice = "Proposal rejected."
                 elif path == "/add-recurring":
                     store.add_recurring_task(
                         int(data["project_id"]), data.get("title", ""),
