@@ -72,6 +72,19 @@ def build_parser() -> argparse.ArgumentParser:
     recurring_status = commands.add_parser("set-recurring-status", help="Pause, resume or complete a recurring rule")
     recurring_status.add_argument("recurring_id", type=int)
     recurring_status.add_argument("status", choices=["active", "paused", "completed"])
+
+    propose = commands.add_parser("propose-task", help="Submit a task for human approval")
+    propose.add_argument("project_id", type=int)
+    propose.add_argument("title")
+    propose.add_argument("--rationale", default="")
+    propose.add_argument("--priority", type=int, choices=[1, 2, 3, 4, 5], default=3)
+    propose.add_argument("--due-date")
+    proposal_list = commands.add_parser("proposals", help="List task proposals")
+    proposal_list.add_argument("--status", choices=["pending", "approved", "rejected"])
+    approve = commands.add_parser("approve-proposal", help="Approve a proposal and create its task")
+    approve.add_argument("proposal_id", type=int)
+    reject = commands.add_parser("reject-proposal", help="Reject a pending task proposal")
+    reject.add_argument("proposal_id", type=int)
     generate_recurring = commands.add_parser("generate-recurring", help="Create due recurring task instances")
     generate_recurring.add_argument("--through", help="Generate occurrences due through YYYY-MM-DD")
     generate_recurring.add_argument("--limit", type=int, default=100)
@@ -484,6 +497,26 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "set-recurring-status":
             store.set_recurring_task_status(args.recurring_id, args.status)
             print(f"Recurring rule #{args.recurring_id} set to {args.status}")
+        elif args.command == "propose-task":
+            proposal_id = store.create_task_proposal(
+                args.project_id, args.title, args.rationale, args.priority, args.due_date
+            )
+            print(f"Task proposal #{proposal_id} submitted for human approval.")
+        elif args.command == "proposals":
+            proposals = store.list_task_proposals(args.status)
+            print(f"SAGE TASK PROPOSALS ({len(proposals)})")
+            for proposal in proposals:
+                print(
+                    f"#{proposal['id']} [{proposal['status']}] {proposal['title']} "
+                    f"| project: {proposal['project_name']} | P{proposal['priority']} "
+                    f"| {proposal['rationale']}"
+                )
+        elif args.command == "approve-proposal":
+            task_id = store.approve_task_proposal(args.proposal_id)
+            print(f"Approved proposal #{args.proposal_id}; created task #{task_id}.")
+        elif args.command == "reject-proposal":
+            store.reject_task_proposal(args.proposal_id)
+            print(f"Rejected proposal #{args.proposal_id}.")
         elif args.command == "generate-recurring":
             through = date.fromisoformat(args.through) if args.through else None
             generated = store.generate_recurring_tasks(through, args.limit)
