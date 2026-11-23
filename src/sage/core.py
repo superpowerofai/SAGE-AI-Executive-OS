@@ -673,7 +673,8 @@ class SageStore:
         safety_copy: Path | None = None
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with sqlite3.connect(str(source)) as source_connection:
+            source_connection = sqlite3.connect(str(source))
+            try:
                 check = source_connection.execute("PRAGMA integrity_check").fetchone()
                 if not check or check[0] != "ok":
                     raise ValueError("Restore source failed SQLite integrity check.")
@@ -684,16 +685,26 @@ class SageStore:
                 }
                 if not {"projects", "tasks"}.issubset(tables):
                     raise ValueError("Restore source is not a recognized SAGE database.")
-                with sqlite3.connect(str(temporary)) as restored:
+                restored = sqlite3.connect(str(temporary))
+                try:
                     source_connection.backup(restored)
                     result = restored.execute("PRAGMA integrity_check").fetchone()
                     if not result or result[0] != "ok":
                         raise OSError("Restored database failed integrity check.")
+                finally:
+                    restored.close()
+            finally:
+                source_connection.close()
             if target.exists():
                 stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
                 safety_copy = target.with_name(target.name + f".pre-restore-{stamp}.bak")
-                with sqlite3.connect(str(target)) as current, sqlite3.connect(str(safety_copy)) as backup:
+                current = sqlite3.connect(str(target))
+                backup = sqlite3.connect(str(safety_copy))
+                try:
                     current.backup(backup)
+                finally:
+                    backup.close()
+                    current.close()
             os.replace(temporary, target)
             return safety_copy
         finally:
