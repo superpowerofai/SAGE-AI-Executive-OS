@@ -49,10 +49,12 @@ def test_openai_compatible_client_sends_chat_completion_request():
 def test_context_preview_and_ai_suggestion_use_read_only_snapshot(tmp_path):
     store = SageStore(tmp_path / "ai-context.db")
     venture = store.add_venture("OPERONIX AI")
-    store.add_project("Lead automation", venture_id=venture)
+    project = store.add_project("Lead automation", venture_id=venture)
+    store.add_task(project, "Contact first lead", priority=1)
     preview = preview_context(store)
     assert "OPERONIX AI" in preview
     assert "Lead automation" in preview
+    assert "Contact first lead" in preview
 
     captured = {}
     def fake_complete(self, messages):
