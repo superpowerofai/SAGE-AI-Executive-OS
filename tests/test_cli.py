@@ -166,3 +166,22 @@ def test_cli_ai_suggestion_requires_explicit_context_consent(tmp_path):
 
     with pytest.raises(SystemExit):
         main(["--db", str(tmp_path / "ai.db"), "suggest", "Choose my next priority"])
+
+
+def test_cli_recurring_task_commands(tmp_path, capsys):
+    database = str(tmp_path / "recurring-cli.db")
+    main(["--db", database, "add-project", "Operations"])
+    capsys.readouterr()
+
+    assert main(["--db", database, "add-recurring-task", "1", "Daily review",
+                 "--frequency", "daily", "--start-date", "2026-11-23"]) == 0
+    assert "Created recurring rule #1" in capsys.readouterr().out
+
+    assert main(["--db", database, "generate-recurring", "--through", "2026-11-24"]) == 0
+    assert "Generated 2 recurring task(s)" in capsys.readouterr().out
+
+    assert main(["--db", database, "recurring-tasks"]) == 0
+    assert "next 2026-11-25" in capsys.readouterr().out
+
+    assert main(["--db", database, "set-recurring-status", "1", "paused"]) == 0
+    assert "set to paused" in capsys.readouterr().out
