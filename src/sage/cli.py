@@ -225,7 +225,7 @@ def _show_decisions(store: SageStore, limit: int) -> None:
         return
     for entry in entries:
         revisit = f" | revisit {entry['revisit_date']}" if entry["revisit_date"] else ""
-        print(f"\\n#{entry['id']} {entry['decision_date']} — {entry['title']}{revisit}")
+        print(f"\n#{entry['id']} {entry['decision_date']} — {entry['title']}{revisit}")
         print(f"  Decision: {entry['choice']}")
         if entry["context"]:
             print(f"  Context: {entry['context']}")
@@ -243,7 +243,7 @@ def _show_blockers(store: SageStore, status: str) -> None:
         linked = entry["project_name"] or "Unassigned"
         if entry["task_title"]:
             linked += f" / {entry['task_title']}"
-        print(f"\\n#{entry['id']} [{entry['status']}] {entry['title']} — {linked}")
+        print(f"\n#{entry['id']} [{entry['status']}] {entry['title']} — {linked}")
         if entry["details"]:
             print(f"  Details: {entry['details']}")
 
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                     if venture["weekly_hours_cap"] is not None else "hours cap not set"
                 )
                 print(
-                    f"\\n#{venture['id']} [{venture['status']}] P{venture['strategic_priority']} "
+                    f"\n#{venture['id']} [{venture['status']}] P{venture['strategic_priority']} "
                     f"{venture['name']} | {venture['active_projects']}/{venture['projects']} active projects "
                     f"| {venture['open_tasks']} open tasks | {budget} | {hours}"
                 )
