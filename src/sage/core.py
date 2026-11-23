@@ -6,6 +6,7 @@ It stores data in a SQLite database on the user's machine.
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
 import math
 import os
@@ -163,6 +164,8 @@ CREATE TABLE IF NOT EXISTS action_requests (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at TEXT,
     completed_at TEXT,
+    payload_sha256 TEXT NOT NULL DEFAULT '',
+    expires_at TEXT,
     result TEXT NOT NULL DEFAULT '',
     error TEXT NOT NULL DEFAULT ''
 );
@@ -235,6 +238,23 @@ class SageStore:
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_proposals_source_uid "
                 "ON task_proposals(source_uid) WHERE source_uid IS NOT NULL"
             )
+            action_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(action_requests)")
+            }
+            if "payload_sha256" not in action_columns:
+                connection.execute(
+                    "ALTER TABLE action_requests ADD COLUMN payload_sha256 TEXT NOT NULL DEFAULT ''"
+                )
+            if "expires_at" not in action_columns:
+                connection.execute("ALTER TABLE action_requests ADD COLUMN expires_at TEXT")
+            for action in connection.execute(
+                "SELECT id, payload_json FROM action_requests WHERE payload_sha256 = ''"
+            ):
+                digest = hashlib.sha256(action["payload_json"].encode("utf-8")).hexdigest()
+                connection.execute(
+                    "UPDATE action_requests SET payload_sha256 = ? WHERE id = ?",
+                    (digest, action["id"]),
+                )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1025,10 +1045,14 @@ class SageStore:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.ics", filename, re.IGNORECASE):
             raise ValueError("Calendar filename must be a simple .ics filename (no folders or path traversal).")
         safe_payload = {"filename": filename}
+        payload_json = json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)
+        payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        created = datetime.now(timezone.utc)
+        expires = (created + timedelta(hours=24)).isoformat(timespec="seconds")
         with self._connect() as connection:
             cursor = connection.execute(
-                "INSERT INTO action_requests (action_type, summary, payload_json) VALUES (?, ?, ?)",
-                (action_type, summary, json.dumps(safe_payload, ensure_ascii=False)),
+                "INSERT INTO action_requests (action_type, summary, payload_json, payload_sha256, expires_at) VALUES (?, ?, ?, ?, ?)",
+                (action_type, summary, payload_json, payload_hash, expires),
             )
             return int(cursor.lastrowid)
 
@@ -1057,6 +1081,22 @@ class SageStore:
             if row["status"] != "pending":
                 raise ValueError("Only pending action requests can be approved; actions are never replayed.")
             payload = json.loads(row["payload_json"])
+            current_hash = hashlib.sha256(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            if not row["payload_sha256"] or current_hash != row["payload_sha256"]:
+                raise ValueError("Action payload integrity check failed; approval is blocked.")
+            if row["expires_at"]:
+                expires_at = datetime.fromisoformat(row["expires_at"])
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) >= expires_at.astimezone(timezone.utc):
+                    connection.execute(
+                        "UPDATE action_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ? AND status = 'pending'",
+                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), "Approval window expired; create a new request.", request_id),
+                    )
+                    connection.commit()
+                    raise ValueError("Action approval expired; create a new request.")
             if row["action_type"] != "calendar_export":
                 raise ValueError("No execution adapter is registered for this action type.")
             filename = payload.get("filename", "")

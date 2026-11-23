@@ -98,3 +98,69 @@ def test_legacy_v9_json_without_action_queue_remains_importable(tmp_path):
     restored.import_data(legacy_path)
     assert restored.list_projects()[0]["name"] == "Legacy project"
     assert restored.list_action_requests() == []
+
+
+def test_action_payload_tampering_blocks_approval(tmp_path):
+    store = SageStore(tmp_path / "sage.db")
+    request_id = store.create_action_request(
+        "calendar_export", "Export tasks", {"filename": "safe.ics"}
+    )
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE action_requests SET payload_json = ? WHERE id = ?",
+            ('{"filename":"tampered.ics"}', request_id),
+        )
+    with pytest.raises(ValueError, match="integrity check failed"):
+        store.approve_action_request(request_id)
+    assert store.list_action_requests()[0]["status"] == "pending"
+    assert not (tmp_path / "exports" / "tampered.ics").exists()
+
+
+def test_expired_action_request_cannot_execute(tmp_path):
+    store = SageStore(tmp_path / "sage.db")
+    request_id = store.create_action_request(
+        "calendar_export", "Export tasks", {"filename": "expired.ics"}
+    )
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE action_requests SET expires_at = ? WHERE id = ?",
+            ("2000-01-01T00:00:00+00:00", request_id),
+        )
+    with pytest.raises(ValueError, match="approval expired"):
+        store.approve_action_request(request_id)
+    record = store.list_action_requests()[0]
+    assert record["status"] == "failed"
+    assert "expired" in record["error"]
+    assert not (tmp_path / "exports" / "expired.ics").exists()
+
+
+def test_legacy_action_queue_migrates_payload_integrity_columns(tmp_path):
+    import sqlite3
+    import hashlib
+
+    database = tmp_path / "legacy.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE action_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_type TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                approved_at TEXT,
+                completed_at TEXT,
+                result TEXT NOT NULL DEFAULT '',
+                error TEXT NOT NULL DEFAULT ''
+            )"""
+        )
+        payload = '{"filename": "legacy.ics"}'
+        connection.execute(
+            "INSERT INTO action_requests (action_type, summary, payload_json) VALUES (?, ?, ?)",
+            ("calendar_export", "Legacy queued action", payload),
+        )
+    store = SageStore(database)
+    record = store.list_action_requests()[0]
+    expected_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    assert record["payload_sha256"] == expected_hash
+    assert record["expires_at"] is None
