@@ -135,3 +135,23 @@ def test_cli_serve_invokes_local_web_cockpit(tmp_path, monkeypatch):
     database = str(tmp_path / "serve.db")
     assert main(["--db", database, "serve", "--host", "localhost", "--port", "9876"]) == 0
     assert called == {"host": "localhost", "port": 9876, "database": database}
+
+
+def test_cli_edit_and_archive_commands(tmp_path, capsys):
+    database = str(tmp_path / "edit-cli.db")
+    main(["--db", database, "add-project", "Draft project"])
+    capsys.readouterr()
+    main(["--db", database, "add-task", "1", "Draft task"])
+    capsys.readouterr()
+
+    assert main(["--db", database, "edit-project", "1",
+                 "--name", "Final project"]) == 0
+    assert "Updated project #1" in capsys.readouterr().out
+    assert main(["--db", database, "edit-task", "1",
+                 "--title", "Final task", "--priority", "1"]) == 0
+    assert "Updated task #1" in capsys.readouterr().out
+
+    assert main(["--db", database, "archive-task", "1"]) == 0
+    assert "Archived task #1" in capsys.readouterr().out
+    assert main(["--db", database, "archive-project", "1"]) == 0
+    assert "Archived project #1" in capsys.readouterr().out
