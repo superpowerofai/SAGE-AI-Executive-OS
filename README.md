@@ -29,7 +29,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create an integrity-checked SQLite backup without interrupting normal reads.
 - Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
 - Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers, resource entries and income entries) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
-- Preview the exact bounded business context prepared for AI; external transmission requires the explicit `--send-context` flag.
+- Preview the exact bounded business context prepared for AI; external transmission requires explicit `--send-context` approval in the CLI or an approval checkbox in the local cockpit.
 - Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
 
 ## Requirements
@@ -37,7 +37,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Python 3.10 or newer
 - pip
 
-The application runtime uses only the Python standard library. Pytest and a Python 3.10 TOML compatibility dependency are used for tests.
+The application runtime uses only the Python standard library. The optional AI adapter uses the standard library HTTP client. Pytest and a Python 3.10 TOML compatibility dependency are used for tests.
 
 ## Install locally
 
@@ -122,7 +122,7 @@ On Windows, double-click `start_sage.bat` from the project folder to launch the 
 
 SAGE supports OpenAI-compatible chat-completion endpoints. It does not store API credentials.
 
-For a local endpoint, configure the base URL and model in your shell (example for a local server exposing an OpenAI-compatible API):
+The Windows launcher defaults to the local Ollama endpoint at `http://127.0.0.1:11434/v1` with `qwen3:1.7b`; override these environment variables if needed. For another local endpoint, configure the base URL and model in your shell:
 
 ```powershell
 $env:SAGE_AI_BASE_URL = "http://127.0.0.1:11434/v1"
@@ -138,7 +138,7 @@ sage context-preview
 sage suggest "What should receive my next focused work block?" --send-context
 ```
 
-AI responses are suggestions only. They are not automatically saved as decisions, tasks, or actions. The context preview includes venture records, project/task lists, open blockers, recent reviews/decisions, and recent resource entries; inspect it before sending.
+The local cockpit includes an AI Advisor form with an explicit consent checkbox. AI responses are suggestions only. They are not automatically saved as decisions, tasks, or actions. The context preview includes venture records, project/task lists, open blockers, recent reviews/decisions, and recent resource entries; inspect it before sending.
 
 ## GitHub Actions
 
