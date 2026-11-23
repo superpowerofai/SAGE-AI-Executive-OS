@@ -20,6 +20,19 @@ def build_parser() -> argparse.ArgumentParser:
     project_add = commands.add_parser("add-project", help="Create a project")
     project_add.add_argument("name")
     project_add.add_argument("--description", default="")
+    project_add.add_argument("--venture-id", type=int)
+
+    venture_add = commands.add_parser("add-venture", help="Create a business or venture")
+    venture_add.add_argument("name")
+    venture_add.add_argument("--description", default="")
+    venture_add.add_argument("--monthly-budget-cap", type=float)
+    venture_add.add_argument("--weekly-hours-cap", type=float)
+    venture_add.add_argument("--priority", type=int, choices=[1, 2, 3, 4, 5], default=3)
+
+    commands.add_parser("ventures", help="List ventures and resource capacity")
+    assign = commands.add_parser("assign-project", help="Assign a project to a venture")
+    assign.add_argument("project_id", type=int)
+    assign.add_argument("venture_id", type=int, help="Use 0 to unassign")
 
     commands.add_parser("projects", help="List projects")
 
@@ -273,8 +286,44 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "add-project":
-            project_id = store.add_project(args.name, args.description)
+            project_id = store.add_project(args.name, args.description, args.venture_id)
             print(f"Created project #{project_id}: {args.name}")
+        elif args.command == "add-venture":
+            venture_id = store.add_venture(
+                args.name, args.description, args.monthly_budget_cap,
+                args.weekly_hours_cap, args.priority,
+            )
+            print(f"Created venture #{venture_id}: {args.name}")
+        elif args.command == "ventures":
+            summary = store.portfolio_summary()
+            print("SAGE VENTURE PORTFOLIO")
+            for venture in summary["ventures"]:
+                budget = (
+                    f"₹{venture['monthly_budget_cap']:,.2f}/month cap"
+                    if venture["monthly_budget_cap"] is not None else "budget cap not set"
+                )
+                hours = (
+                    f"{venture['weekly_hours_cap']:g} hours/week cap"
+                    if venture["weekly_hours_cap"] is not None else "hours cap not set"
+                )
+                print(
+                    f"\\n#{venture['id']} [{venture['status']}] P{venture['strategic_priority']} "
+                    f"{venture['name']} | {venture['active_projects']}/{venture['projects']} active projects "
+                    f"| {venture['open_tasks']} open tasks | {budget} | {hours}"
+                )
+            print(f"Unassigned projects: {summary['unassigned_projects']}")
+            print(
+                f"Known caps entered: ₹{summary['known_monthly_budget_caps']:,.2f}/month "
+                f"across {summary['budget_cap_entries']} ventures; "
+                f"{summary['known_weekly_hours_caps']:g} hours/week "
+                f"across {summary['hours_cap_entries']} ventures."
+            )
+        elif args.command == "assign-project":
+            store.assign_project_to_venture(
+                args.project_id, None if args.venture_id == 0 else args.venture_id
+            )
+            print(f"Assigned project #{args.project_id} to " +
+                  ("no venture" if args.venture_id == 0 else f"venture #{args.venture_id}"))
         elif args.command == "projects":
             for project in store.list_projects():
                 print(
