@@ -102,6 +102,8 @@ sage add-obligation 1 receivable 25000 2026-12-01 "Client invoice"
 sage add-recurring-obligation 1 payable 9000 "Office rent" --frequency monthly --start-date 2026-12-01
 sage generate-recurring-obligations
 sage obligations --status open
+sage set-cash-position 1 50000 2026-11-23 --note "Verified opening cash"
+sage cash-positions
 sage settle-obligation 1
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
