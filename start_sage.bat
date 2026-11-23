@@ -25,7 +25,7 @@ if errorlevel 1 (
         pause
         exit /b 1
     )
-    timeout /t 3 /nobreak >nul
+    powershell -NoProfile -Command "Start-Sleep -Seconds 3"
 )
 
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"
