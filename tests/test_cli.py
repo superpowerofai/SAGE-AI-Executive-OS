@@ -220,3 +220,18 @@ def test_cli_obligation_tracking_and_settlement(tmp_path, capsys):
     assert main(["--db", database, "ventures"]) == 0
     output = capsys.readouterr().out
     assert "INR 12,500.00 income" in output
+
+
+def test_cli_recurring_financial_obligation_commands(tmp_path, capsys):
+    database = str(tmp_path / "recurring-finance-cli.db")
+    main(["--db", database, "add-venture", "Office"])
+    capsys.readouterr()
+    assert main(["--db", database, "add-recurring-obligation", "1", "payable",
+                 "9000", "Office rent", "--frequency", "monthly",
+                 "--start-date", "2026-11-23"]) == 0
+    assert "Created recurring payable rule #1" in capsys.readouterr().out
+    assert main(["--db", database, "generate-recurring-obligations",
+                 "--through", "2026-11-23"]) == 0
+    assert "Generated 1 financial obligation(s)" in capsys.readouterr().out
+    assert main(["--db", database, "obligations", "--status", "open"]) == 0
+    assert "Office rent" in capsys.readouterr().out
