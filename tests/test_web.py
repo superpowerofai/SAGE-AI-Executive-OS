@@ -56,6 +56,29 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     assert "Market entry" in decision_page
     assert store.list_decisions()[0]["choice"] == "Agencies"
 
+    venture_request = Request(
+        url + "/add-venture",
+        data=b"name=OPERONIX%20AI&monthly_budget_cap=12000&weekly_hours_cap=15&priority=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(venture_request, timeout=2) as response:
+        venture_page = response.read().decode()
+    assert "Venture created." in venture_page
+    assert "OPERONIX AI" in venture_page
+    venture_id = store.list_ventures()[0]["id"]
+
+    project_request = Request(
+        url + "/add-project",
+        data=f"name=Sales%20automation&venture_id={venture_id}".encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(project_request, timeout=2) as response:
+        project_page = response.read().decode()
+    assert "Project created." in project_page
+    assert store.list_projects()[0]["venture_id"] == venture_id
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
