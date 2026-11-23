@@ -85,6 +85,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS context_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL DEFAULT 'general',
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    importance INTEGER NOT NULL DEFAULT 3 CHECK (importance BETWEEN 1 AND 5),
+    source TEXT NOT NULL DEFAULT 'user',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS cash_positions (
     venture_id INTEGER PRIMARY KEY,
     opening_balance REAL NOT NULL,
@@ -741,6 +753,59 @@ class SageStore:
                     break
         return created
 
+
+
+    def add_context_note(
+        self, title: str, content: str, category: str = "general",
+        importance: int = 3, source: str = "user",
+    ) -> int:
+        title = title.strip()
+        content = content.strip()
+        category = category.strip().lower()
+        if not title or not content:
+            raise ValueError("Context note title and content are required.")
+        if len(title) > 160 or len(content) > 5000:
+            raise ValueError("Context note title is limited to 160 characters and content to 5000.")
+        if not category or len(category) > 40:
+            raise ValueError("Category must contain 1–40 characters.")
+        if importance not in range(1, 6):
+            raise ValueError("Importance must be between 1 and 5.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """INSERT INTO context_notes (category, title, content, importance, source)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (category, title, content, importance, source.strip() or "user"),
+            )
+            return int(cursor.lastrowid)
+
+    def list_context_notes(
+        self, category: str | None = None, status: str = "active"
+    ) -> list[dict[str, Any]]:
+        if status not in {"active", "archived"}:
+            raise ValueError("Context note status must be active or archived.")
+        query = "SELECT * FROM context_notes WHERE status = ?"
+        values: list[Any] = [status]
+        if category:
+            query += " AND category = ?"
+            values.append(category.strip().lower())
+        query += " ORDER BY importance, updated_at DESC, id DESC"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, tuple(values))]
+
+    def archive_context_note(self, note_id: int) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE context_notes SET status = 'archived',
+                   updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'""",
+                (note_id,),
+            )
+            if cursor.rowcount == 0:
+                exists = connection.execute(
+                    "SELECT 1 FROM context_notes WHERE id = ?", (note_id,)
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"Context note {note_id} does not exist.")
+                raise ValueError("Only active context notes can be archived.")
 
     def set_cash_position(
         self, venture_id: int, opening_balance: float,
@@ -1456,6 +1521,10 @@ class SageStore:
             "pending_task_proposals": self.list_task_proposals("pending")[:30],
             "open_obligations": self.list_obligations("open")[:30],
             "recurring_obligations": self.list_recurring_obligations()[:30],
+            "context_notes": [
+                {**note, "content": note["content"][:2000]}
+                for note in self.list_context_notes()[:40]
+            ],
         }
 
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -1492,17 +1561,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6, 7, 8}:
+        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4, 5, 6, 7} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions"}:
+            if table not in data and version in {1, 2, 3, 4, 5, 6, 7, 8} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1672,7 +1741,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 8,
+                "version": 9,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
