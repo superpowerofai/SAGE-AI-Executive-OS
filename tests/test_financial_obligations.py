@@ -64,3 +64,12 @@ def test_obligation_validation_and_cross_venture_project_guard(tmp_path):
         store.add_obligation(one, "payable", 100, "not-a-date", "Invalid date")
     with pytest.raises(ValueError):
         store.add_obligation(one, "other", 100, "2026-11-30", "Invalid type")
+
+
+def test_overdue_payables_raise_a_portfolio_attention_signal(tmp_path):
+    store = SageStore(tmp_path / "overdue.db")
+    venture = store.add_venture("Overdue venture")
+    store.add_obligation(venture, "payable", 3500, "2026-11-20", "Past due supplier")
+    summary = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]
+    assert summary["overdue_payables"] == 3500
+    assert "overdue" in summary["allocation_signal"].lower()
