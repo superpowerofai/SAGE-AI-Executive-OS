@@ -113,6 +113,7 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     source_store.add_task(project, "Validate first seller", priority=1)
     source_store.log_resource(venture, "expense", 300, project_id=project, note="Domain")
     source_store.log_income(venture, 1500, project_id=project, note="Client payment")
+    source_store.add_recurring_task(project, "Weekly seller review")
     export_path = source_store.export_data(tmp_path / "portable.json")
 
     restored = SageStore(tmp_path / "restored.db")
@@ -122,8 +123,10 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     assert counts["tasks"] == 1
     assert counts["resource_entries"] == 1
     assert counts["income_entries"] == 1
+    assert counts["recurring_tasks"] == 1
     assert restored.list_ventures()[0]["name"] == "ABSE.INC"
     assert restored.list_projects()[0]["name"] == "Marketplace"
+    assert restored.list_recurring_tasks()[0]["title"] == "Weekly seller review"
     assert {entry["note"] for entry in restored.list_resource_entries()} == {"Domain", "Client payment"}
 
 
