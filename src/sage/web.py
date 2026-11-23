@@ -36,9 +36,9 @@ def _page(store: SageStore, notice: str = "") -> str:
         f"<td>{'₹' + format(v['monthly_budget_cap'], ',.2f') if v['monthly_budget_cap'] is not None else 'Not set'}</td>"
         f"<td>₹{v['month_spend']:,.2f}</td>"
         f"<td>{str(v['weekly_hours_cap']) if v['weekly_hours_cap'] is not None else 'Not set'}</td>"
-        f"<td>{v['week_hours_used']:g}</td></tr>"
+        f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
-    ) or "<tr><td colspan='7'>No ventures registered yet.</td></tr>"
+    ) or "<tr><td colspan='10'>No ventures registered yet.</td></tr>"
     resource_rows = "".join(
         f"<li>{e(r['entry_date'])} · {e(r['venture_name'])} · "
         f"{'₹' + format(r['quantity'], ',.2f') if r['entry_type'] == 'expense' else str(r['quantity']) + ' hours'}"
@@ -95,7 +95,7 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
 <section><h2>VENTURE PORTFOLIO</h2><p>Resource caps are optional planning inputs you enter; SAGE does not infer budgets or available hours.</p>
-<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Spent this month (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th></tr>{venture_rows}</table></div>
+<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Spent this month (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th><th>Allocation signal</th></tr>{venture_rows}</table></div>
 <form method='post' action='/add-venture'><input name='name' placeholder='New venture name' required><input name='description' placeholder='Description'><input name='monthly_budget_cap' type='number' min='0' step='0.01' placeholder='Monthly budget cap ₹'><input name='weekly_hours_cap' type='number' min='0' step='0.5' placeholder='Weekly hours cap'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><button>Add venture</button></form>
 <form method='post' action='/log-resource'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='entry_type'><option value='expense'>Expense (₹)</option><option value='time'>Time (hours)</option></select><input name='quantity' type='number' min='0.01' step='0.01' placeholder='Amount / hours' required><input name='note' placeholder='What was spent / worked on'><button>Log resource</button></form>
 <h3>Recent resource entries</h3><ul>{resource_rows}</ul></section>
