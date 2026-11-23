@@ -248,3 +248,15 @@ def test_cli_manual_cash_position(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "INR 15,000.00" in output
     assert "Verified balance" in output
+
+
+def test_cli_context_note_commands(tmp_path, capsys):
+    database = str(tmp_path / "notes-cli.db")
+    assert main(["--db", database, "add-note", "Execution preference",
+                 "One clear next action", "--category", "preferences",
+                 "--importance", "1"]) == 0
+    assert "Saved SAGE context note #1" in capsys.readouterr().out
+    assert main(["--db", database, "notes", "--category", "preferences"]) == 0
+    assert "One clear next action" in capsys.readouterr().out
+    assert main(["--db", database, "archive-note", "1"]) == 0
+    assert "Archived SAGE context note #1" in capsys.readouterr().out
