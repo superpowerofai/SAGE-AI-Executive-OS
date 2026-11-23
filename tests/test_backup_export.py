@@ -117,6 +117,7 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     source_store.create_task_proposal(project, "Call next seller", "Approval required")
     source_store.add_obligation(venture, "receivable", 2200, "2026-12-01", "Invoice")
     source_store.add_recurring_obligation(venture, "payable", 700, "Monthly service", start_date="2026-12-01")
+    source_store.set_cash_position(venture, 5000, "2026-11-22", "Opening cash")
     export_path = source_store.export_data(tmp_path / "portable.json")
 
     restored = SageStore(tmp_path / "restored.db")
@@ -130,12 +131,14 @@ def test_json_export_import_round_trip_preserves_ventures_and_resource_entries(t
     assert counts["task_proposals"] == 1
     assert counts["financial_obligations"] == 1
     assert counts["recurring_obligations"] == 1
+    assert counts["cash_positions"] == 1
     assert restored.list_ventures()[0]["name"] == "ABSE.INC"
     assert restored.list_projects()[0]["name"] == "Marketplace"
     assert restored.list_recurring_tasks()[0]["title"] == "Weekly seller review"
     assert restored.list_task_proposals()[0]["title"] == "Call next seller"
     assert restored.list_obligations()[0]["description"] == "Invoice"
     assert restored.list_recurring_obligations()[0]["description"] == "Monthly service"
+    assert restored.list_cash_positions()[0]["opening_balance"] == 5000
     assert {entry["note"] for entry in restored.list_resource_entries()} == {"Domain", "Client payment"}
 
 
@@ -154,6 +157,7 @@ def test_json_import_supports_legacy_v1_exports(tmp_path):
     payload["data"].pop("task_proposals")
     payload["data"].pop("financial_obligations")
     payload["data"].pop("recurring_obligations")
+    payload["data"].pop("cash_positions")
     export_path.write_text(json.dumps(payload), encoding="utf-8")
 
     restored = SageStore(tmp_path / "legacy-target.db")
