@@ -124,6 +124,16 @@ def build_parser() -> argparse.ArgumentParser:
     cash_position.add_argument("as_of_date")
     cash_position.add_argument("--note", default="")
     commands.add_parser("cash-positions", help="List manually entered venture cash positions")
+
+    add_note = commands.add_parser("add-note", help="Save a persistent SAGE context note")
+    add_note.add_argument("title")
+    add_note.add_argument("content")
+    add_note.add_argument("--category", default="general")
+    add_note.add_argument("--importance", type=int, choices=[1, 2, 3, 4, 5], default=3)
+    note_list = commands.add_parser("notes", help="List active SAGE context notes")
+    note_list.add_argument("--category")
+    archive_note = commands.add_parser("archive-note", help="Archive a context note")
+    archive_note.add_argument("note_id", type=int)
     generate_recurring = commands.add_parser("generate-recurring", help="Create due recurring task instances")
     generate_recurring.add_argument("--through", help="Generate occurrences due through YYYY-MM-DD")
     generate_recurring.add_argument("--limit", type=int, default=100)
@@ -626,6 +636,22 @@ def main(argv: list[str] | None = None) -> int:
                     f"{position['venture_name']}: INR {position['opening_balance']:,.2f} "
                     f"as of {position['as_of_date']} | {position['note']}"
                 )
+        elif args.command == "add-note":
+            note_id = store.add_context_note(
+                args.title, args.content, args.category, args.importance
+            )
+            print(f"Saved SAGE context note #{note_id}.")
+        elif args.command == "notes":
+            notes = store.list_context_notes(category=args.category)
+            print(f"SAGE CONTEXT NOTES ({len(notes)})")
+            for note in notes:
+                print(
+                    f"#{note['id']} [{note['category']}] P{note['importance']} "
+                    f"{note['title']}: {note['content']}"
+                )
+        elif args.command == "archive-note":
+            store.archive_context_note(args.note_id)
+            print(f"Archived SAGE context note #{args.note_id}.")
         elif args.command == "generate-recurring":
             through = date.fromisoformat(args.through) if args.through else None
             generated = store.generate_recurring_tasks(through, args.limit)
