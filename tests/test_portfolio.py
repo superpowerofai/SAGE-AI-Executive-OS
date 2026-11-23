@@ -183,3 +183,48 @@ def test_project_next_actions_selects_one_per_active_project(tmp_path):
     assert actions[0]["task_title"] == "Already in progress"
     assert actions[1]["project_name"] == "Second project"
     assert actions[1]["task_id"] is None
+
+
+def test_allocation_readiness_distinguishes_missing_data_from_review_ready(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "allocation-readiness.db")
+    ready = store.add_venture(
+        "Ready", monthly_budget_cap=5000, weekly_hours_cap=12,
+        strategic_priority=1,
+    )
+    ready_project = store.add_project("Ready project", venture_id=ready)
+    store.add_task(ready_project, "Approved next step")
+    store.set_cash_position(ready, 20000, "2026-11-23", "Bank statement")
+
+    incomplete = store.add_venture("Incomplete")
+    incomplete_project = store.add_project("Incomplete project", venture_id=incomplete)
+    store.add_task(incomplete_project, "Gather data")
+
+    items = {
+        item["name"]: item
+        for item in store.portfolio_summary(today=date(2026, 11, 23))["ventures"]
+    }
+    assert items["Ready"]["allocation_readiness"] == "ready_for_review"
+    assert items["Ready"]["allocation_blockers"] == []
+    assert items["Ready"]["allocation_data_gaps"] == []
+    assert items["Incomplete"]["allocation_readiness"] == "needs_data"
+    assert "monthly budget cap" in items["Incomplete"]["allocation_data_gaps"]
+    assert "verified cash position" in items["Incomplete"]["allocation_data_gaps"]
+
+
+def test_allocation_readiness_holds_when_recorded_budget_cap_is_exceeded(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "allocation-hold.db")
+    venture = store.add_venture(
+        "Over-cap", monthly_budget_cap=100, weekly_hours_cap=10
+    )
+    project = store.add_project("Delivery", venture_id=venture)
+    store.add_task(project, "Deliver customer work")
+    store.set_cash_position(venture, 10000, "2026-11-23")
+    store.log_resource(venture, "expense", 150, "2026-11-23")
+
+    item = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]
+    assert item["allocation_readiness"] == "hold"
+    assert "recorded resource cap exceeded" in item["allocation_blockers"]
