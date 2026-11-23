@@ -15,7 +15,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
 - View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.
-- Launch a browser-based local cockpit to create projects/tasks, update statuses, record daily reviews, and manage blockers.
+- Launch a browser-based local cockpit to manage ventures, project ownership, expense/time logs, projects/tasks, statuses, daily reviews, blockers and decisions.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
 - Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
