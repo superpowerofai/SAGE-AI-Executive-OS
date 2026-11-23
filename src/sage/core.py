@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -656,6 +657,48 @@ class SageStore:
             finally:
                 destination_connection.close()
         return target
+
+
+    def restore_backup(self, source_path: str | Path) -> Path | None:
+        """Restore a verified SQLite backup, preserving the current DB first."""
+        source = Path(source_path).expanduser().resolve()
+        target = Path(self.database).expanduser().resolve()
+        if not source.is_file():
+            raise ValueError(f"Backup file does not exist: {source}")
+        if source == target:
+            raise ValueError("Restore source must differ from the active database.")
+        temporary = target.with_name(target.name + ".restore.tmp")
+        if temporary.exists():
+            raise ValueError(f"Temporary restore file already exists: {temporary}")
+        safety_copy: Path | None = None
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with sqlite3.connect(str(source)) as source_connection:
+                check = source_connection.execute("PRAGMA integrity_check").fetchone()
+                if not check or check[0] != "ok":
+                    raise ValueError("Restore source failed SQLite integrity check.")
+                tables = {
+                    row[0] for row in source_connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                if not {"projects", "tasks"}.issubset(tables):
+                    raise ValueError("Restore source is not a recognized SAGE database.")
+                with sqlite3.connect(str(temporary)) as restored:
+                    source_connection.backup(restored)
+                    result = restored.execute("PRAGMA integrity_check").fetchone()
+                    if not result or result[0] != "ok":
+                        raise OSError("Restored database failed integrity check.")
+            if target.exists():
+                stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+                safety_copy = target.with_name(target.name + f".pre-restore-{stamp}.bak")
+                with sqlite3.connect(str(target)) as current, sqlite3.connect(str(safety_copy)) as backup:
+                    current.backup(backup)
+            os.replace(temporary, target)
+            return safety_copy
+        finally:
+            if temporary.exists():
+                temporary.unlink()
 
     def export_data(self, destination: str | Path, overwrite: bool = False) -> Path:
         """Export all SAGE records as portable, versioned UTF-8 JSON."""
