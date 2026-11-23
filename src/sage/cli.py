@@ -72,6 +72,21 @@ def build_parser() -> argparse.ArgumentParser:
     project_status.add_argument(
         "status", choices=["active", "paused", "completed"]
     )
+    edit_project = commands.add_parser("edit-project", help="Edit a project's name or description")
+    edit_project.add_argument("project_id", type=int)
+    edit_project.add_argument("--name")
+    edit_project.add_argument("--description")
+    archive_project = commands.add_parser("archive-project", help="Mark a project completed")
+    archive_project.add_argument("project_id", type=int)
+
+    edit_task = commands.add_parser("edit-task", help="Edit a task's title, priority or due date")
+    edit_task.add_argument("task_id", type=int)
+    edit_task.add_argument("--title")
+    edit_task.add_argument("--priority", type=int)
+    edit_task.add_argument("--due-date")
+    edit_task.add_argument("--clear-due-date", action="store_true")
+    archive_task = commands.add_parser("archive-task", help="Mark a task done")
+    archive_task.add_argument("task_id", type=int)
 
     plan = commands.add_parser("plan", help="Show a 7-day or 30-day execution plan")
     plan.add_argument("--days", type=int, choices=[7, 30], default=7)
@@ -400,6 +415,21 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "set-project-status":
             store.set_project_status(args.project_id, args.status)
             print(f"Updated project #{args.project_id} to {args.status}")
+        elif args.command == "edit-project":
+            store.update_project(args.project_id, args.name, args.description)
+            print(f"Updated project #{args.project_id}")
+        elif args.command == "archive-project":
+            store.set_project_status(args.project_id, "completed")
+            print(f"Archived project #{args.project_id} (status: completed)")
+        elif args.command == "edit-task":
+            store.update_task(
+                args.task_id, args.title, args.priority, args.due_date,
+                args.clear_due_date,
+            )
+            print(f"Updated task #{args.task_id}")
+        elif args.command == "archive-task":
+            store.set_task_status(args.task_id, "done")
+            print(f"Archived task #{args.task_id} (status: done)")
         elif args.command == "plan":
             _show_plan(store, args.days)
         elif args.command == "review":
