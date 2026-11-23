@@ -185,3 +185,21 @@ def test_cli_recurring_task_commands(tmp_path, capsys):
 
     assert main(["--db", database, "set-recurring-status", "1", "paused"]) == 0
     assert "set to paused" in capsys.readouterr().out
+
+
+def test_cli_task_proposals_require_approval(tmp_path, capsys):
+    database = str(tmp_path / "proposal-cli.db")
+    main(["--db", database, "add-project", "Sales"])
+    capsys.readouterr()
+
+    assert main(["--db", database, "propose-task", "1", "Contact a prospect",
+                 "--rationale", "Direct revenue action", "--priority", "1"]) == 0
+    assert "submitted for human approval" in capsys.readouterr().out
+
+    assert main(["--db", database, "tasks"]) == 0
+    assert "Contact a prospect" not in capsys.readouterr().out
+
+    assert main(["--db", database, "approve-proposal", "1"]) == 0
+    assert "created task #1" in capsys.readouterr().out
+    assert main(["--db", database, "tasks"]) == 0
+    assert "Contact a prospect" in capsys.readouterr().out
