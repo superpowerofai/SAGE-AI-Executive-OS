@@ -132,17 +132,46 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(payload)
 
+        def _local_request_allowed(self) -> bool:
+            allowed_hosts = {"127.0.0.1", "localhost", "::1"}
+            try:
+                host = urlparse("//" + self.headers.get("Host", "")).hostname
+                host_port = urlparse("//" + self.headers.get("Host", "")).port
+                if host not in allowed_hosts or host_port not in (None, self.server.server_port):
+                    return False
+                origin = self.headers.get("Origin")
+                if origin:
+                    parsed_origin = urlparse(origin)
+                    if (
+                        parsed_origin.scheme != "http"
+                        or parsed_origin.hostname not in allowed_hosts
+                        or parsed_origin.port != self.server.server_port
+                    ):
+                        return False
+            except ValueError:
+                return False
+            return True
+
         def do_GET(self) -> None:
+            if not self._local_request_allowed():
+                self._send(403, "Local requests only")
+                return
             if urlparse(self.path).path != "/":
                 self._send(404, "Not found")
                 return
             self._send(200, _page(store))
 
         def do_POST(self) -> None:
+            if not self._local_request_allowed():
+                self._send(403, "Local requests only")
+                return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
                 "/task-status", "/project-status", "/edit-project", "/edit-task", "/review", "/add-blocker",
