@@ -9,6 +9,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create projects with a name, optional description and optional venture owner.
 - Register ventures with strategic priority plus optional monthly budget and weekly hours caps.
 - Assign and reassign projects to ventures; compare project/task load and explicitly entered resource caps in a portfolio summary.
+- Log actual INR expenses and hours worked against ventures (optionally linked to a project), and compare month-to-date / week-to-date usage with caps.
 - Track project status: active, paused, completed.
 - Add tasks with priority 1 (highest) through 5 (lowest).
 - Track task status: todo, in_progress, done.
@@ -25,7 +26,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
 - Persist data in a local SQLite database.
 - Create an integrity-checked SQLite backup without interrupting normal reads.
-- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers) to versioned UTF-8 JSON.
+- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON.
 
 ## Requirements
 
@@ -88,6 +89,9 @@ sage focus
 sage add-venture "OPERONIX AI" --priority 1 --monthly-budget-cap 25000 --weekly-hours-cap 18
 sage add-project "Lead follow-up system" --venture-id 1
 sage ventures
+sage log-expense 1 1250 --note "Hosting"
+sage log-time 1 2.5 --note "Build automation"
+sage resources --venture-id 1
 sage plan --days 7
 sage plan --days 30
 ```
@@ -109,7 +113,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 
 ## Architecture
 
-- `src/sage/core.py`: SQLite schema/migrations, venture portfolio, project/task operations, backup and JSON export.
+- `src/sage/core.py`: SQLite schema/migrations, venture portfolio, resource ledger, project/task operations, backup and JSON export.
 - `src/sage/cli.py`: command-line interface.
 - `src/sage/__main__.py`: `python -m sage` entry point.
 - `tests/`: configuration, core behavior and CLI workflow tests.
