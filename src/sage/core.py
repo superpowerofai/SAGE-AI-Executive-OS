@@ -710,6 +710,19 @@ class SageStore:
         }
 
 
+    def ai_context(self) -> dict[str, Any]:
+        """Build a bounded, read-only context snapshot for an explicitly approved AI request."""
+        return {
+            "as_of": date.today().isoformat(),
+            "portfolio": self.portfolio_summary(),
+            "projects": self.list_projects(),
+            "tasks": self.list_tasks()[:60],
+            "open_blockers": self.list_blockers("open")[:25],
+            "recent_reviews": self.list_reviews(7),
+            "recent_decisions": self.list_decisions(15),
+            "recent_resource_entries": self.list_resource_entries(limit=30),
+        }
+
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
         """Create a consistent SQLite backup without interrupting normal reads."""
         target = Path(destination).expanduser().resolve()
