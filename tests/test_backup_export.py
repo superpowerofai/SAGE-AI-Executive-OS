@@ -53,7 +53,7 @@ def test_json_export_contains_every_record_type_and_unicode(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert payload["format"] == "sage-export"
-    assert payload["version"] == 7
+    assert payload["version"] == 8
     assert payload["data"]["projects"][0]["name"] == "घर का काम"
     assert len(payload["data"]["tasks"]) == 1
     assert len(payload["data"]["daily_reviews"]) == 1
