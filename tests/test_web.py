@@ -92,6 +92,17 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Resource entry recorded." in resource_page
     assert store.list_resource_entries(venture_id)[0]["quantity"] == 1250
 
+    cash_position_request = Request(
+        url + "/set-cash-position",
+        data=b"venture_id=1&opening_balance=10000&as_of_date=2026-11-22&note=Verified%20balance",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(cash_position_request, timeout=2) as response:
+        cash_page = response.read().decode()
+    assert "Manual cash position saved." in cash_page
+    assert store.list_cash_positions()[0]["opening_balance"] == 10000
+
     income_request = Request(
         url + "/log-resource",
         data=f"venture_id={venture_id}&entry_type=income&quantity=5000&note=Client%20payment".encode(),
