@@ -126,6 +126,10 @@ def build_parser() -> argparse.ArgumentParser:
     export_json.add_argument("destination", help="JSON output file path")
     export_json.add_argument("--force", action="store_true", help="Replace an existing destination")
 
+    restore = commands.add_parser("restore", help="Restore a verified SQLite backup")
+    restore.add_argument("source", help="Backup database file to restore")
+    restore.add_argument("--yes", action="store_true", help="Confirm replacing the active database")
+
     commands.add_parser("dashboard", help="Show a summary")
     commands.add_parser("focus", help="Show active projects and one next action")
     return parser
