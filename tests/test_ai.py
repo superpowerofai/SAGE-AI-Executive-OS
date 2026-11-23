@@ -82,11 +82,13 @@ def test_daily_briefing_uses_recorded_data_and_reports_unknowns(tmp_path):
     project = store.add_project("First project", venture_id=venture)
     task_id = store.add_task(project, "Call first prospect", priority=1)
     store.add_blocker("Waiting for customer list", project_id=project)
+    store.create_action_request("calendar_export", "Export current tasks", {"filename": "tasks.ics"})
     briefing = build_daily_briefing(store)
 
     assert briefing["master_next_action"]["task_id"] == task_id
     assert briefing["master_next_action"]["title"] == "Call first prospect"
     assert briefing["open_blockers"][0]["title"] == "Waiting for customer list"
+    assert briefing["pending_action_approvals"][0]["summary"] == "Export current tasks"
     assert any("cash is unknown" in gap for gap in briefing["data_gaps"])
     rendered = format_daily_briefing(briefing)
     assert "MASTER NEXT ACTION" in rendered

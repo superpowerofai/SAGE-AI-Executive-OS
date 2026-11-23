@@ -86,6 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
     reject = commands.add_parser("reject-proposal", help="Reject a pending task proposal")
     reject.add_argument("proposal_id", type=int)
 
+    action_request = commands.add_parser("request-calendar-export", help="Queue a calendar export for explicit approval")
+    action_request.add_argument("--filename", default="sage-calendar.ics")
+    commands.add_parser("actions", help="List approval-gated action requests")
+    approve_action = commands.add_parser("approve-action", help="Approve and execute one queued local action")
+    approve_action.add_argument("request_id", type=int)
+    reject_action = commands.add_parser("reject-action", help="Reject a queued action request")
+    reject_action.add_argument("request_id", type=int)
+
     add_obligation = commands.add_parser("add-obligation", help="Record a receivable or payable")
     add_obligation.add_argument("venture_id", type=int)
     add_obligation.add_argument("obligation_type", choices=["receivable", "payable"])
@@ -580,6 +588,22 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "reject-proposal":
             store.reject_task_proposal(args.proposal_id)
             print(f"Rejected proposal #{args.proposal_id}.")
+        elif args.command == "request-calendar-export":
+            request_id = store.create_action_request(
+                "calendar_export", f"Export open dated tasks to {args.filename}", {"filename": args.filename}
+            )
+            print(f"Action request #{request_id} queued as pending. Nothing was exported; approve it with 'sage approve-action {request_id}'.")
+        elif args.command == "actions":
+            requests = store.list_action_requests()
+            print(f"SAGE ACTION APPROVAL QUEUE ({len(requests)})")
+            for request in requests:
+                print(f"#{request['id']} [{request['status']}] {request['action_type']} | {request['summary']} | {request.get('result') or request.get('error') or 'awaiting decision'}")
+        elif args.command == "approve-action":
+            destination = store.approve_action_request(args.request_id)
+            print(f"Approved and executed action #{args.request_id}. Calendar file created: {destination}")
+        elif args.command == "reject-action":
+            store.reject_action_request(args.request_id)
+            print(f"Rejected action request #{args.request_id}. No action was executed.")
         elif args.command == "add-obligation":
             obligation_id = store.add_obligation(
                 args.venture_id, args.obligation_type, args.amount, args.due_date,

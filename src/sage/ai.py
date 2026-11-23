@@ -99,6 +99,7 @@ def build_daily_briefing(store: SageStore) -> dict:
     actions = store.project_next_actions()
     blockers = store.list_blockers("open")
     proposals = store.list_task_proposals("pending")
+    pending_actions = store.list_action_requests("pending")
     reviews = store.list_reviews(1)
     portfolio = store.portfolio_summary(today)["ventures"]
 
@@ -140,6 +141,7 @@ def build_daily_briefing(store: SageStore) -> dict:
         "upcoming_7_day_tasks": plan["upcoming"],
         "open_blockers": blockers,
         "pending_task_approvals": proposals,
+        "pending_action_approvals": pending_actions,
         "latest_review": reviews[0] if reviews else None,
         "financial_risks": risks,
         "data_gaps": data_gaps,
@@ -162,7 +164,8 @@ def format_daily_briefing(briefing: dict) -> str:
                        ("upcoming_7_day_tasks", "UPCOMING — NEXT 7 DAYS"),
                        ("active_project_actions", "ONE ACTION PER ACTIVE PROJECT"),
                        ("open_blockers", "OPEN BLOCKERS"),
-                       ("pending_task_approvals", "PENDING HUMAN APPROVALS"),
+                       ("pending_task_approvals", "PENDING TASK APPROVALS"),
+                       ("pending_action_approvals", "PENDING ACTION APPROVALS"),
                        ("financial_risks", "RECORDED FINANCIAL RISKS"),
                        ("data_gaps", "UNKNOWN / MISSING INPUTS")):
         items = briefing[key]
@@ -175,6 +178,8 @@ def format_daily_briefing(briefing: dict) -> str:
                     lines.append(f"- {item}")
                 elif key == "financial_risks":
                     lines.append(f"- {item['venture']}: {item['type']} (INR {item['amount_inr']:,.2f})")
+                elif key == "pending_action_approvals":
+                    lines.append(f"- #{item['id']} {item['summary']} [{item['status']}]")
                 elif key == "active_project_actions":
                     title = item.get("task_title") or "No task recorded — define the first action"
                     lines.append(f"- {item['project_name']}: {title}")

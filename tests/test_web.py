@@ -34,6 +34,7 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "SAGE" in page and "EXECUTIVE COCKPIT" in page
     assert "DAILY EXECUTIVE BRIEFING" in page
     assert "UNKNOWN / MISSING INPUTS" in page
+    assert "CONTROLLED ACTIONS" in page
     assert page.count("7-DAY EXECUTION PLAN") == 1
     assert page.count("DECISION JOURNAL") == 1
     request = Request(
@@ -47,6 +48,28 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Project created." in updated
     assert "Test venture" in updated
     assert store.list_projects()[0]["name"] == "Test venture"
+
+    queue_request = Request(
+        url + "/request-calendar-export",
+        data=b"filename=web-calendar.ics",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(queue_request, timeout=2) as response:
+        queued_page = response.read().decode()
+    assert "Nothing was exported" in queued_page
+    assert not (tmp_path / "exports" / "web-calendar.ics").exists()
+    action_id = store.list_action_requests("pending")[0]["id"]
+    approve_request = Request(
+        url + "/approve-action",
+        data=f"id={action_id}".encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(approve_request, timeout=2) as response:
+        approved_page = response.read().decode()
+    assert "Calendar export created" in approved_page
+    assert (tmp_path / "exports" / "web-calendar.ics").is_file()
 
     decision_request = Request(
         url + "/decision",

@@ -262,3 +262,21 @@ def test_cli_context_note_commands(tmp_path, capsys):
     assert "One clear next action" in capsys.readouterr().out
     assert main(["--db", database, "archive-note", "1"]) == 0
     assert "Archived SAGE context note #1" in capsys.readouterr().out
+
+
+def test_cli_action_queue_requires_approval(tmp_path, capsys):
+    database = str(tmp_path / "actions.db")
+    assert main(["--db", database, "add-project", "Calendar project"]) == 0
+    capsys.readouterr()
+    assert main(["--db", database, "add-task", "1", "Ship release", "--due-date", "2026-12-01"]) == 0
+    capsys.readouterr()
+    assert main(["--db", database, "request-calendar-export", "--filename", "release.ics"]) == 0
+    queued = capsys.readouterr().out
+    assert "pending" in queued and "Nothing was exported" in queued
+    assert not (tmp_path / "exports" / "release.ics").exists()
+    assert main(["--db", database, "actions"]) == 0
+    assert "calendar_export" in capsys.readouterr().out
+    assert main(["--db", database, "approve-action", "1"]) == 0
+    approved = capsys.readouterr().out
+    assert "Approved and executed" in approved
+    assert (tmp_path / "exports" / "release.ics").is_file()

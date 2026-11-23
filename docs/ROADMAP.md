@@ -1,8 +1,8 @@
-# SAGE Development Roadmap
+﻿# SAGE Development Roadmap
 
 This roadmap distinguishes implemented code from behavior that has actually been verified.
 
-## v0.1 — Local execution core
+## v0.1 â€” Local execution core
 
 - [x] SQLite-backed project and task model
 - [x] CLI commands for projects and tasks
@@ -14,7 +14,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] GitHub Actions matrix for Python 3.10, 3.11, 3.12 and 3.13
 - [x] Confirm a successful clean CI run across the matrix (run 45098699843)
 
-## v0.2 — Usability
+## v0.2 â€” Usability
 
 - [x] CLI focus view for active/paused projects, one next action per active project and one master priority (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 - [x] Local interactive web cockpit for projects, tasks, reviews and blockers (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
@@ -35,14 +35,14 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Optional Windows Task Scheduler installer for daily recurring task/obligation generation (user chooses the time)
 - [ ] Desktop notifications and cross-platform scheduling
 
-## v0.3 — Executive review
+## v0.3 â€” Executive review
 
 - [x] Daily review record and recent review history (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 - [x] 7-day and 30-day review summaries (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 - [x] Structured blocker tracking with project/task links and resolution state (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 - [x] Decision journal with context, choice, rationale and revisit date (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 
-## v0.4 — Optional AI assistance
+## v0.4 â€” Optional AI assistance
 
 - [x] Provider-neutral OpenAI-compatible chat-completion adapter (CI-verified)
 - [x] Bounded context preview and explicit opt-in before external transmission (CI-verified)
@@ -51,9 +51,10 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Evidence-only daily executive briefing in CLI and local cockpit; one master action, project actions, risks and missing inputs (84 local tests passing)
 - [x] Optional AI interpretation of the daily briefing with explicit context-transmission approval (unit-tested; local Qwen3 endpoint smoke-tested end-to-end using synthetic records only)
 - [x] Human approval queue for task proposals; approval creates the task, rejection records the decision (CI-verified)
-- [ ] Approval gates for future external actions and automated workflows
+- [x] Approval-gated action registry with explicit pending/executing/executed/rejected/failed states, allow-listed calendar-export adapter, path validation, no-overwrite behavior, duplicate-execution prevention, and JSON backup/restore compatibility (97 local tests passing)
+- [ ] Approval gates for external email/calendar API actions and automated workflows
 
-## v0.5 — Local desktop operations
+## v0.5 â€” Local desktop operations
 
 - [x] Windows one-click launcher and desktop shortcut
 - [x] Local Ollama connection with context preview and explicit consent

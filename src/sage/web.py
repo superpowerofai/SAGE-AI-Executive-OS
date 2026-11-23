@@ -15,6 +15,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     project_actions = store.project_next_actions()
     recurring_rules = store.list_recurring_tasks()
     proposals = store.list_task_proposals()
+    action_requests = store.list_action_requests()
     obligations = store.list_obligations()
     recurring_obligations = store.list_recurring_obligations()
     cash_positions = store.list_cash_positions()
@@ -99,6 +100,14 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<option>active</option><option>paused</option><option>completed</option></select>"
         f"<button>Update</button></form></td></tr>" for rule in recurring_rules
     ) or "<tr><td colspan='7'>No recurring task rules.</td></tr>"
+    action_rows = "".join(
+        f"<tr><td>#{a['id']}</td><td>{e(a['action_type'])}</td><td>{e(a['summary'])}</td>"
+        f"<td>{e(a['status'])}</td><td>{e(a.get('result') or a.get('error') or 'Awaiting decision')}</td><td>" + (
+            f"<form method='post' action='/approve-action'><input type='hidden' name='id' value='{a['id']}'><button>Approve & execute</button></form>"
+            f"<form method='post' action='/reject-action'><input type='hidden' name='id' value='{a['id']}'><button class='secondary'>Reject</button></form>"
+            if a['status'] == 'pending' else "—"
+        ) + "</td></tr>" for a in action_requests
+    ) or "<tr><td colspan='6'>No action requests.</td></tr>"
     project_action_rows = "".join(
         f"<li><strong>{e(a['venture_name'] or 'Unassigned')} · {e(a['project_name'])}</strong>: "
         f"{e(a['task_title']) if a['task_id'] is not None else 'No open task — add the first action'}"
@@ -179,6 +188,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <section><h2>HUMAN APPROVAL QUEUE</h2><p>Proposed tasks do not enter the execution plan until you approve them. Approval creates the task; rejection records the decision.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Proposed task</th><th>Rationale</th><th>Priority</th><th>Status</th><th>Decision</th></tr>{proposal_rows}</table></div>
 <form method='post' action='/propose-task'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects)}</select><input name='title' placeholder='Proposed next task' required><input name='rationale' placeholder='Why this task?'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='due_date' type='date'><button>Submit for approval</button></form></section>
+<section><h2>CONTROLLED ACTIONS</h2><p>Only allow-listed actions can run. Requests are inert until you approve them. Current built-in action: create a local calendar export in the SAGE exports folder. No email, payment, or remote action is enabled.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Action</th><th>Preview</th><th>Status</th><th>Result</th><th>Decision</th></tr>{action_rows}</table></div>
+<form method='post' action='/request-calendar-export'><input name='filename' value='sage-calendar.ics' required><button>Request calendar export (approval required)</button></form></section>
 <section><h2>RECURRING TASKS</h2><p>Rules generate dated task instances only when you press Generate due tasks. Generation is bounded to 100 instances per request.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Task</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_rows}</table></div>
 <form method='post' action='/add-recurring'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects if p['status'] == 'active')}</select><input name='title' placeholder='Recurring task' required><select name='frequency'><option>daily</option><option selected>weekly</option><option>monthly</option></select><input name='every' type='number' min='1' max='365' value='1' title='Repeat every N units'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='start_date' type='date'><button>Add recurring rule</button></form>
@@ -264,7 +276,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
                 "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-note", "/archive-note", "/set-cash-position", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
-                "/resolve-blocker", "/decision",
+                "/resolve-blocker", "/decision", "/request-calendar-export", "/approve-action", "/reject-action",
             }:
                 self._send(404, "Not found")
                 return
@@ -327,6 +339,18 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 elif path == "/cancel-obligation":
                     store.cancel_obligation(int(data["id"]))
                     notice = "Obligation cancelled."
+                elif path == "/request-calendar-export":
+                    filename = data.get("filename", "sage-calendar.ics")
+                    request_id = store.create_action_request(
+                        "calendar_export", f"Export open dated tasks to {filename}", {"filename": filename}
+                    )
+                    notice = f"Calendar export request #{request_id} queued. Nothing was exported; approve it in Controlled Actions."
+                elif path == "/approve-action":
+                    destination = store.approve_action_request(int(data["id"]))
+                    notice = f"Approved and executed action. Calendar export created at {destination}."
+                elif path == "/reject-action":
+                    store.reject_action_request(int(data["id"]))
+                    notice = "Action request rejected. Nothing was executed."
                 elif path == "/propose-task":
                     store.create_task_proposal(
                         int(data["project_id"]), data.get("title", ""),

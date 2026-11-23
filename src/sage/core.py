@@ -152,6 +152,20 @@ CREATE TABLE IF NOT EXISTS task_proposals (
     FOREIGN KEY (approved_task_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS action_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_type TEXT NOT NULL CHECK (action_type IN ('calendar_export')),
+    summary TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'executing', 'executed', 'rejected', 'failed')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at TEXT,
+    completed_at TEXT,
+    result TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS recurring_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -989,6 +1003,92 @@ class SageStore:
                     raise ValueError(f"Obligation {obligation_id} does not exist.")
                 raise ValueError("Only open obligations can be cancelled.")
 
+    def create_action_request(self, action_type: str, summary: str, payload: dict[str, Any]) -> int:
+        """Queue a narrowly allow-listed action; creation never executes it."""
+        if action_type != "calendar_export":
+            raise ValueError("Unsupported action type. Allowed: calendar_export.")
+        summary = summary.strip()
+        if not summary:
+            raise ValueError("Action summary cannot be empty.")
+        filename = str(payload.get("filename", "sage-calendar.ics"))
+        import re
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.ics", filename, re.IGNORECASE):
+            raise ValueError("Calendar filename must be a simple .ics filename (no folders or path traversal).")
+        safe_payload = {"filename": filename}
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO action_requests (action_type, summary, payload_json) VALUES (?, ?, ?)",
+                (action_type, summary, json.dumps(safe_payload, ensure_ascii=False)),
+            )
+            return int(cursor.lastrowid)
+
+    def list_action_requests(self, status: str | None = None) -> list[dict[str, Any]]:
+        allowed = {"pending", "executing", "executed", "rejected", "failed"}
+        if status is not None and status not in allowed:
+            raise ValueError("Invalid action request status.")
+        query = "SELECT * FROM action_requests"
+        values: tuple[Any, ...] = ()
+        if status is not None:
+            query += " WHERE status = ?"
+            values = (status,)
+        query += " ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'executing' THEN 1 ELSE 2 END, id DESC"
+        with self._connect() as connection:
+            rows = [dict(row) for row in connection.execute(query, values)]
+        for row in rows:
+            row["payload"] = json.loads(row.pop("payload_json"))
+        return rows
+
+    def approve_action_request(self, request_id: int) -> Path:
+        """Approve and execute one registered local action exactly once."""
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM action_requests WHERE id = ?", (request_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Action request {request_id} does not exist.")
+            if row["status"] != "pending":
+                raise ValueError("Only pending action requests can be approved; actions are never replayed.")
+            payload = json.loads(row["payload_json"])
+            if row["action_type"] != "calendar_export":
+                raise ValueError("No execution adapter is registered for this action type.")
+            filename = payload.get("filename", "")
+            import re
+            if not isinstance(filename, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.ics", filename, re.IGNORECASE):
+                raise ValueError("Stored calendar export filename failed safety validation.")
+            claimed = connection.execute(
+                "UPDATE action_requests SET status = 'executing', approved_at = ? WHERE id = ? AND status = 'pending'",
+                (datetime.now().isoformat(timespec="seconds"), request_id),
+            )
+            if claimed.rowcount != 1:
+                raise ValueError("This action request has already been claimed; it will not be executed twice.")
+        export_dir = Path(self.database).expanduser().resolve().parent / "exports"
+        target = export_dir / filename
+        try:
+            result = self.export_calendar(target, overwrite=False)
+        except Exception as error:
+            with self._connect() as connection:
+                connection.execute(
+                    "UPDATE action_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ? AND status = 'executing'",
+                    (datetime.now().isoformat(timespec="seconds"), str(error)[:1000], request_id),
+                )
+            raise
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE action_requests SET status = 'executed', completed_at = ?, result = ? WHERE id = ? AND status = 'executing'",
+                (datetime.now().isoformat(timespec="seconds"), str(result), request_id),
+            )
+        return result
+
+    def reject_action_request(self, request_id: int) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE action_requests SET status = 'rejected', completed_at = ? WHERE id = ? AND status = 'pending'",
+                (datetime.now().isoformat(timespec="seconds"), request_id),
+            )
+            if cursor.rowcount == 0:
+                exists = connection.execute("SELECT 1 FROM action_requests WHERE id = ?", (request_id,)).fetchone()
+                if exists is None:
+                    raise ValueError(f"Action request {request_id} does not exist.")
+                raise ValueError("Only pending action requests can be rejected.")
+
     def create_task_proposal(
         self, project_id: int, title: str, rationale: str = "",
         priority: int = 3, due_date: str | None = None,
@@ -1591,17 +1691,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
+        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4, 5, 6, 7, 8} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes"}:
+            if table not in data and version in {1, 2, 3, 4, 5, 6, 7, 8, 9} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1767,11 +1867,11 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 9,
+                "version": 10,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
