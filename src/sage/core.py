@@ -949,12 +949,12 @@ class SageStore:
     @staticmethod
     def _ics_escape(value: str) -> str:
         return (
-            value.replace("\\\\", "\\\\\\\\")
-            .replace(";", "\\\\;")
-            .replace(",", "\\\\,")
-            .replace("\\r\\n", "\\\\n")
-            .replace("\\n", "\\\\n")
-            .replace("\\r", "")
+            value.replace("\\", "\\\\")
+            .replace(";", "\\;")
+            .replace(",", "\\,")
+            .replace("\r\n", "\\n")
+            .replace("\n", "\\n")
+            .replace("\r", "")
         )
 
     def export_calendar(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -986,9 +986,9 @@ class SageStore:
             task = dict(row)
             due = date.fromisoformat(task["due_date"])
             description = (
-                f"Project: {task['project_name']}\\n"
-                f"Venture: {task['venture_name'] or 'Unassigned'}\\n"
-                f"Priority: P{task['priority']}\\nStatus: {task['status']}"
+                f"Project: {task['project_name']}\n"
+                f"Venture: {task['venture_name'] or 'Unassigned'}\n"
+                f"Priority: P{task['priority']}\nStatus: {task['status']}"
             )
             lines.extend([
                 "BEGIN:VEVENT",
@@ -1004,7 +1004,7 @@ class SageStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_name(target.name + ".tmp")
         try:
-            temporary.write_text("\\r\\n".join(lines) + "\\r\\n", encoding="utf-8")
+            temporary.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
             temporary.replace(target)
         finally:
             if temporary.exists():
