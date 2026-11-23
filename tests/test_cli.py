@@ -203,3 +203,20 @@ def test_cli_task_proposals_require_approval(tmp_path, capsys):
     assert "created task #1" in capsys.readouterr().out
     assert main(["--db", database, "tasks"]) == 0
     assert "Contact a prospect" in capsys.readouterr().out
+
+
+def test_cli_obligation_tracking_and_settlement(tmp_path, capsys):
+    database = str(tmp_path / "obligation-cli.db")
+    main(["--db", database, "add-venture", "Service venture"])
+    capsys.readouterr()
+    main(["--db", database, "add-obligation", "1", "receivable", "12500",
+          "2026-12-01", "Client invoice"])
+    assert "Created receivable obligation #1" in capsys.readouterr().out
+    assert main(["--db", database, "obligations", "--status", "open"]) == 0
+    assert "INR 12,500.00" in capsys.readouterr().out
+    assert main(["--db", database, "settle-obligation", "1",
+                 "--date", "2026-11-23"]) == 0
+    assert "posted actual ledger entry" in capsys.readouterr().out
+    assert main(["--db", database, "ventures"]) == 0
+    output = capsys.readouterr().out
+    assert "INR 12,500.00 income" in output
