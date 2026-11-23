@@ -216,6 +216,28 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Proposal approved. Task" in approved_page
     assert any(task["title"] == "Proposed follow-up" for task in store.list_tasks())
 
+    obligation_request = Request(
+        url + "/add-obligation",
+        data=b"venture_id=1&obligation_type=receivable&amount=4000&due_date=2026-12-01&description=Client%20invoice",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(obligation_request, timeout=2) as response:
+        obligation_page = response.read().decode()
+    assert "Financial obligation recorded." in obligation_page
+    assert len(store.list_obligations("open")) == 1
+
+    settle_request = Request(
+        url + "/settle-obligation",
+        data=b"id=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(settle_request, timeout=2) as response:
+        settled_page = response.read().decode()
+    assert "Obligation settled" in settled_page
+    assert store.list_obligations("settled")[0]["description"] == "Client invoice"
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
