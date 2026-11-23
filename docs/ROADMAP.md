@@ -31,7 +31,8 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Receivable/payable obligations, 30-day due forecast and settlement-to-ledger posting (CI-verified)
 - [x] Recurring daily/weekly/monthly task rules with bounded on-demand generation (CI-verified)
 - [x] One-way iCalendar export for open dated tasks (CI-verified)
-- [ ] Desktop notifications and automatic scheduled recurring-task generation
+- [x] Optional Windows Task Scheduler installer for daily recurring task/obligation generation (user chooses the time)
+- [ ] Desktop notifications and cross-platform scheduling
 
 ## v0.3 — Executive review
 
