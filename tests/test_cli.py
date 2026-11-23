@@ -79,11 +79,15 @@ def test_cli_venture_and_resource_tracking(tmp_path, capsys):
     assert main(["--db", database, "log-time", "1", "2.5",
                  "--note", "Workflow build"]) == 0
     assert "Recorded time" in capsys.readouterr().out
+    assert main(["--db", database, "log-income", "1", "9500",
+                 "--note", "First client payment"]) == 0
+    assert "Recorded income" in capsys.readouterr().out
 
     assert main(["--db", database, "ventures"]) == 0
     output = capsys.readouterr().out
     assert "OPERONIX AI" in output
-    assert "₹1,200.00 spent this month" in output
+    assert "₹9,500.00 income" in output
+    assert "₹1,200.00 expenses" in output
     assert "2.5 hours logged this week" in output
 
     assert main(["--db", database, "resources", "--venture-id", "1"]) == 0
