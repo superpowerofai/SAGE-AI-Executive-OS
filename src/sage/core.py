@@ -745,6 +745,70 @@ class SageStore:
         return target
 
 
+    def import_data(self, source_path: str | Path) -> dict[str, int]:
+        """Import a versioned SAGE JSON export into an empty database atomically."""
+        source = Path(source_path).expanduser().resolve()
+        if not source.is_file():
+            raise ValueError(f"JSON export does not exist: {source}")
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("JSON export is not valid UTF-8 JSON.") from error
+        if not isinstance(payload, dict) or payload.get("format") != "sage-export":
+            raise ValueError("File is not a recognized SAGE JSON export.")
+        version = payload.get("version")
+        if version not in {1, 2}:
+            raise ValueError(f"Unsupported SAGE export version: {version}")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("SAGE export is missing its data object.")
+        tables = (
+            "ventures", "projects", "tasks", "daily_reviews",
+            "decisions", "blockers", "resource_entries",
+        )
+        for table in tables:
+            if table not in data and version == 1 and table in {"ventures", "resource_entries"}:
+                data[table] = []
+            if not isinstance(data.get(table), list):
+                raise ValueError(f"SAGE export table '{table}' must be a list.")
+        imported: dict[str, int] = {}
+        with self._connect() as connection:
+            for table in tables:
+                count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                if count:
+                    raise ValueError(
+                        "JSON import requires an empty SAGE database. Choose a new database file."
+                    )
+            connection.execute("BEGIN IMMEDIATE")
+            for table in tables:
+                rows = data[table]
+                columns = [row["name"] for row in connection.execute(
+                    f"PRAGMA table_info({table})"
+                )]
+                imported[table] = 0
+                for record in rows:
+                    if not isinstance(record, dict):
+                        raise ValueError(f"Records in '{table}' must be JSON objects.")
+                    unknown = set(record) - set(columns)
+                    if unknown:
+                        raise ValueError(
+                            f"Unknown fields in '{table}': {', '.join(sorted(unknown))}"
+                        )
+                    names = [column for column in columns if column in record]
+                    if not names:
+                        raise ValueError(f"Record in '{table}' contains no recognized fields.")
+                    placeholders = ", ".join("?" for _ in names)
+                    sql = (
+                        f"INSERT INTO {table} ({', '.join(names)}) "
+                        f"VALUES ({placeholders})"
+                    )
+                    connection.execute(sql, tuple(record[name] for name in names))
+                    imported[table] += 1
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise ValueError("JSON export contains invalid project or venture references.")
+        return imported
+
     def restore_backup(self, source_path: str | Path) -> Path | None:
         """Restore a verified SQLite backup, preserving the current DB first."""
         source = Path(source_path).expanduser().resolve()
@@ -807,7 +871,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 1,
+                "version": 2,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
