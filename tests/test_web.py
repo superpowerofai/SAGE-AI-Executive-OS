@@ -14,7 +14,7 @@ def _free_port():
         return sock.getsockname()[1]
 
 
-def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
+def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     db = tmp_path / "web.db"
     store = SageStore(db)
     port = _free_port()
@@ -132,6 +132,31 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
         edited_task_page = response.read().decode()
     assert "Task updated." in edited_task_page
     assert store.list_tasks()[0]["title"] == "Updated task"
+
+    from sage import ai
+    received = {}
+    def fake_suggestion(current_store, goal, config=None):
+        received["goal"] = goal
+        received["config"] = config.model
+        return "One evidence-led next action."
+
+    monkeypatch.setattr(ai, "generate_suggestion", fake_suggestion)
+    monkeypatch.setenv("SAGE_AI_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("SAGE_AI_MODEL", "test-local-model")
+    suggest_request = Request(
+        url + "/suggest",
+        data=b"goal=Choose%20the%20next%20step&send_context=on",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(suggest_request, timeout=2) as response:
+        suggestion_page = response.read().decode()
+    assert "AI suggestion generated" in suggestion_page
+    assert "One evidence-led next action." in suggestion_page
+    assert received == {
+        "goal": "Choose the next step",
+        "config": "test-local-model",
+    }
 
 
 def test_web_server_refuses_non_local_binding(tmp_path):
