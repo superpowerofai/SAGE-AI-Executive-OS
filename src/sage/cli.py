@@ -203,7 +203,7 @@ def _show_plan(store: SageStore, days: int) -> None:
         ("UNSCHEDULED ACTIVE WORK", plan["unscheduled"]),
     )
     for label, tasks in sections:
-        print(f"\\n{label} ({len(tasks)}):")
+        print(f"\n{label} ({len(tasks)}):")
         if not tasks:
             print("  Nothing here.")
             continue
@@ -233,7 +233,7 @@ def _show_reviews(store: SageStore, limit: int) -> None:
         print("No daily reviews saved yet.")
         return
     for review in reviews:
-        print(f"\\n{review['review_date']} | Priority: {review['priority'] or '—'}")
+        print(f"\n{review['review_date']} | Priority: {review['priority'] or '—'}")
         print(f"  Wins: {review['wins'] or '—'}")
         print(f"  Blockers: {review['blockers'] or '—'}")
         print(f"  Tomorrow: {review['tomorrow'] or '—'}")
@@ -250,7 +250,7 @@ def _show_review_summary(store: SageStore, days: int) -> None:
         print("No reviews recorded in this period.")
         return
     for entry in summary["entries"]:
-        print(f"\\n{entry['review_date']} — Priority: {entry['priority'] or '—'}")
+        print(f"\n{entry['review_date']} — Priority: {entry['priority'] or '—'}")
         if entry["wins"]:
             print(f"  Wins: {entry['wins']}")
         if entry["blockers"]:
@@ -309,9 +309,9 @@ def _show_dashboard(store: SageStore) -> None:
     if open_blockers:
         for item in open_blockers[:3]:
             print(f"  ! {item['title']}")
-    print("\\nMASTER FOCUS")
+    print("\nMASTER FOCUS")
     _show_focus(store)
-    print("\\nLATEST DAILY REVIEW")
+    print("\nLATEST DAILY REVIEW")
     if latest_review:
         review = latest_review[0]
         print(f"  {review['review_date']} | Priority: {review['priority'] or '—'}")
