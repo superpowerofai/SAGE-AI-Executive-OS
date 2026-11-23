@@ -179,6 +179,21 @@ def _show_focus(store: SageStore) -> None:
     for project in paused_projects:
         print(f"  #{project['id']} {project['name']}")
 
+    print("ONE ACTION PER ACTIVE PROJECT:")
+    project_actions = store.project_next_actions()
+    if not project_actions:
+        print("  No active projects.")
+    for action in project_actions:
+        venture = f"[{action['venture_name']}] " if action["venture_name"] else ""
+        if action["task_id"] is None:
+            print(f"  {venture}{action['project_name']}: no open task; add the first action.")
+        else:
+            due = f" | due {action['due_date']}" if action["due_date"] else ""
+            print(
+                f"  {venture}{action['project_name']}: "
+                f"{action['task_title']} (P{action['task_priority']}, {action['task_status']}){due}"
+            )
+
     next_task = next(
         (
             task
