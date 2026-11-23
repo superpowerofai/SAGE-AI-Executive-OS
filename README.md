@@ -10,6 +10,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Register ventures with strategic priority plus optional monthly budget and weekly hours caps.
 - Assign and reassign projects to ventures; compare project/task load and explicitly entered resource caps in a portfolio summary.
 - Log actual INR expenses and hours worked against ventures (optionally linked to a project), compare month-to-date / week-to-date usage with caps, and see transparent rule-based allocation signals using entered priorities and recorded headroom.
+- Edit project names/descriptions and task titles/priorities/due dates; archive projects and tasks by marking them completed/done.
 - Track project status: active, paused, completed.
 - Add tasks with priority 1 (highest) through 5 (lowest).
 - Track task status: todo, in_progress, done.
