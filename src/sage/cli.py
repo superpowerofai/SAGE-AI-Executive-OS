@@ -30,6 +30,20 @@ def build_parser() -> argparse.ArgumentParser:
     venture_add.add_argument("--priority", type=int, choices=[1, 2, 3, 4, 5], default=3)
 
     commands.add_parser("ventures", help="List ventures and resource capacity")
+    for command_name, help_text, quantity_name in (
+        ("log-expense", "Record an expense in INR", "amount"),
+        ("log-time", "Record hours worked", "hours"),
+    ):
+        resource = commands.add_parser(command_name, help=help_text)
+        resource.add_argument("venture_id", type=int)
+        resource.add_argument(quantity_name, type=float)
+        resource.add_argument("--project-id", type=int)
+        resource.add_argument("--date", dest="entry_date")
+        resource.add_argument("--note", default="")
+    resource_list = commands.add_parser("resources", help="List recent resource entries")
+    resource_list.add_argument("--venture-id", type=int)
+    resource_list.add_argument("--limit", type=int, default=100)
+
     assign = commands.add_parser("assign-project", help="Assign a project to a venture")
     assign.add_argument("project_id", type=int)
     assign.add_argument("venture_id", type=int, help="Use 0 to unassign")
@@ -318,6 +332,38 @@ def main(argv: list[str] | None = None) -> int:
                 f"{summary['known_weekly_hours_caps']:g} hours/week "
                 f"across {summary['hours_cap_entries']} ventures."
             )
+            for venture in summary["ventures"]:
+                budget_left = (
+                    f"₹{venture['month_budget_remaining']:,.2f} remaining this month"
+                    if venture["month_budget_remaining"] is not None else "monthly spend cap unknown"
+                )
+                hours_left = (
+                    f"{venture['week_hours_remaining']:g} hours remaining this week"
+                    if venture["week_hours_remaining"] is not None else "weekly hours cap unknown"
+                )
+                print(
+                    f"  Usage — {venture['name']}: ₹{venture['month_spend']:,.2f} spent this month; "
+                    f"{venture['week_hours_used']:g} hours logged this week; "
+                    f"{budget_left}; {hours_left}"
+                )
+        elif args.command in {"log-expense", "log-time"}:
+            kind = "expense" if args.command == "log-expense" else "time"
+            quantity = args.amount if kind == "expense" else args.hours
+            entry_id = store.log_resource(
+                args.venture_id, kind, quantity, args.entry_date, args.project_id, args.note
+            )
+            unit = "₹" if kind == "expense" else "hours"
+            print(f"Recorded {kind} #{entry_id}: {unit}{quantity} for venture #{args.venture_id}")
+        elif args.command == "resources":
+            entries = store.list_resource_entries(args.venture_id, args.limit)
+            print(f"SAGE RESOURCE LOG ({len(entries)})")
+            for entry in entries:
+                quantity = f"₹{entry['quantity']:,.2f}" if entry["entry_type"] == "expense" else f"{entry['quantity']:g} hours"
+                linked = f" / {entry['project_name']}" if entry["project_name"] else ""
+                print(
+                    f"#{entry['id']} {entry['entry_date']} | {entry['venture_name']}{linked} "
+                    f"| {entry['entry_type']}: {quantity} | {entry['note']}"
+                )
         elif args.command == "assign-project":
             store.assign_project_to_venture(
                 args.project_id, None if args.venture_id == 0 else args.venture_id
