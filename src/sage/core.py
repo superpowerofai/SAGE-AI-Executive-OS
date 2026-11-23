@@ -274,16 +274,40 @@ class SageStore:
                 week_hours = float(usage["week_hours"])
                 budget_cap = venture["monthly_budget_cap"]
                 hours_cap = venture["weekly_hours_cap"]
+                active_projects = int(row["active_projects"] or 0)
+                open_tasks = int(row["open_tasks"] or 0)
+                budget_remaining = budget_cap - month_spend if budget_cap is not None else None
+                hours_remaining = hours_cap - week_hours if hours_cap is not None else None
+                missing_caps = []
+                if budget_cap is None:
+                    missing_caps.append("monthly budget")
+                if hours_cap is None:
+                    missing_caps.append("weekly hours")
+                if venture["status"] != "active":
+                    signal = "Inactive venture: exclude from new resource allocation."
+                elif (budget_remaining is not None and budget_remaining < 0) or (
+                    hours_remaining is not None and hours_remaining < 0
+                ):
+                    signal = "Recorded cap exceeded: review commitments before adding resources."
+                elif active_projects == 0:
+                    signal = "No active projects: decide whether to start work or keep this venture paused."
+                elif venture["strategic_priority"] == 1 and missing_caps:
+                    signal = "Highest user-set priority; capacity is unknown until " + " and ".join(missing_caps) + " cap(s) are entered."
+                elif venture["strategic_priority"] == 1:
+                    signal = "Highest user-set priority with recorded cap headroom: consider its next approved action."
+                else:
+                    signal = "Continue current execution; compare outcomes before increasing allocation."
                 summaries.append({
                     **venture,
                     "projects": int(row["projects"] or 0),
-                    "active_projects": int(row["active_projects"] or 0),
-                    "open_tasks": int(row["open_tasks"] or 0),
+                    "active_projects": active_projects,
+                    "open_tasks": open_tasks,
                     "in_progress_tasks": int(row["in_progress_tasks"] or 0),
                     "month_spend": month_spend,
-                    "month_budget_remaining": budget_cap - month_spend if budget_cap is not None else None,
+                    "month_budget_remaining": budget_remaining,
                     "week_hours_used": week_hours,
-                    "week_hours_remaining": hours_cap - week_hours if hours_cap is not None else None,
+                    "week_hours_remaining": hours_remaining,
+                    "allocation_signal": signal,
                 })
             unassigned = connection.execute(
                 "SELECT COUNT(*) FROM projects WHERE venture_id IS NULL"
