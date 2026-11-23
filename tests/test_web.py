@@ -77,7 +77,7 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     with urlopen(project_request, timeout=2) as response:
         project_page = response.read().decode()
     assert "Project created." in project_page
-    assert store.list_projects()[0]["venture_id"] == venture_id
+    assert next(p for p in store.list_projects() if p["name"] == "Sales automation")["venture_id"] == venture_id
 
 
 def test_web_server_refuses_non_local_binding(tmp_path):
