@@ -148,3 +148,19 @@ def test_allocation_signal_uses_priority_and_actual_cap_usage(tmp_path):
     store.log_resource(priority, "expense", 9000, "2026-11-23")
     signal = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]["allocation_signal"]
     assert "cap exceeded" in signal
+
+
+def test_income_ledger_calculates_monthly_net_cash_flow(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "income.db")
+    venture = store.add_venture("Revenue venture", monthly_budget_cap=10000)
+    project = store.add_project("Paid service", venture_id=venture)
+    store.log_income(venture, 18000, "2026-11-23", project, "Client invoice paid")
+    store.log_resource(venture, "expense", 6500, "2026-11-23", project, "Delivery cost")
+    summary = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]
+    assert summary["month_revenue"] == 18000
+    assert summary["month_spend"] == 6500
+    assert summary["month_net_cash_flow"] == 11500
+    entries = store.list_resource_entries(venture)
+    assert {entry["entry_type"] for entry in entries} == {"income", "expense"}
