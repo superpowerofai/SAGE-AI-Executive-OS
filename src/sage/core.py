@@ -145,7 +145,7 @@ class SageStore:
         if status is not None:
             if status not in {"active", "paused", "completed"}:
                 raise ValueError("Invalid venture status.")
-            query += " WHERE status = ?"
+            query += " WHERE projects.status = ?"
             values = (status,)
         query += " ORDER BY strategic_priority, created_at, id"
         with self._connect() as connection:
@@ -235,7 +235,7 @@ class SageStore:
             return int(cursor.lastrowid)
 
     def list_projects(self, status: str | None = None) -> list[dict[str, Any]]:
-        query = "SELECT * FROM projects"
+        query = "SELECT projects.*, ventures.name AS venture_name FROM projects LEFT JOIN ventures ON ventures.id = projects.venture_id"
         values: tuple[Any, ...] = ()
         if status is not None:
             if status not in {"active", "paused", "completed"}:
