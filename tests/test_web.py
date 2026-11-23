@@ -90,6 +90,36 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     assert "Resource entry recorded." in resource_page
     assert store.list_resource_entries(venture_id)[0]["quantity"] == 1250
 
+    edit_project_request = Request(
+        url + "/edit-project",
+        data=b"id=1&name=Edited%20project&description=Updated%20description",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(edit_project_request, timeout=2) as response:
+        edited_page = response.read().decode()
+    assert "Project updated." in edited_page
+    assert store.list_projects()[0]["name"] == "Edited project"
+
+    add_task_request = Request(
+        url + "/add-task",
+        data=b"project_id=1&title=Task%20to%20edit&priority=3",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(add_task_request, timeout=2) as response:
+        response.read()
+    edit_task_request = Request(
+        url + "/edit-task",
+        data=b"id=1&title=Updated%20task&priority=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(edit_task_request, timeout=2) as response:
+        edited_task_page = response.read().decode()
+    assert "Task updated." in edited_task_page
+    assert store.list_tasks()[0]["title"] == "Updated task"
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
