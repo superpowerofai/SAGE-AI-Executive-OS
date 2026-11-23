@@ -235,3 +235,16 @@ def test_cli_recurring_financial_obligation_commands(tmp_path, capsys):
     assert "Generated 1 financial obligation(s)" in capsys.readouterr().out
     assert main(["--db", database, "obligations", "--status", "open"]) == 0
     assert "Office rent" in capsys.readouterr().out
+
+
+def test_cli_manual_cash_position(tmp_path, capsys):
+    database = str(tmp_path / "cash-cli.db")
+    main(["--db", database, "add-venture", "Cash venture"])
+    capsys.readouterr()
+    assert main(["--db", database, "set-cash-position", "1", "15000",
+                 "2026-11-22", "--note", "Verified balance"]) == 0
+    assert "Cash position saved" in capsys.readouterr().out
+    assert main(["--db", database, "cash-positions"]) == 0
+    output = capsys.readouterr().out
+    assert "INR 15,000.00" in output
+    assert "Verified balance" in output
