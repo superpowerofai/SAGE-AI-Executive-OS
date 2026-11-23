@@ -89,6 +89,8 @@ def test_cli_venture_and_resource_tracking(tmp_path, capsys):
     assert "INR 9,500.00 income" in output
     assert "INR 1,200.00 expenses" in output
     assert "2.5 hours logged this week" in output
+    assert "Allocation readiness — needs_data" in output
+    assert "Missing allocation inputs — verified cash position" in output
 
     assert main(["--db", database, "resources", "--venture-id", "1"]) == 0
     assert "Hosting" in capsys.readouterr().out
