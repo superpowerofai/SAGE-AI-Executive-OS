@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS recurring_obligations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venture_id INTEGER NOT NULL,
+    project_id INTEGER,
+    obligation_type TEXT NOT NULL CHECK (obligation_type IN ('receivable', 'payable')),
+    amount REAL NOT NULL CHECK (amount > 0),
+    description TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    frequency_interval INTEGER NOT NULL DEFAULT 1 CHECK (frequency_interval BETWEEN 1 AND 365),
+    next_due_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venture_id) REFERENCES ventures(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS financial_obligations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     venture_id INTEGER NOT NULL,
@@ -561,6 +577,130 @@ class SageStore:
 
 
 
+
+
+    def add_recurring_obligation(
+        self, venture_id: int, obligation_type: str, amount: float,
+        description: str, frequency: str = "monthly", frequency_interval: int = 1,
+        start_date: str | None = None, project_id: int | None = None,
+    ) -> int:
+        value = self._optional_nonnegative_number(amount, "Recurring obligation amount")
+        if value is None or value <= 0:
+            raise ValueError("Recurring obligation amount must be greater than zero.")
+        if obligation_type not in {"receivable", "payable"}:
+            raise ValueError("Obligation type must be receivable or payable.")
+        if frequency not in {"daily", "weekly", "monthly"}:
+            raise ValueError("Frequency must be daily, weekly or monthly.")
+        if frequency_interval not in range(1, 366):
+            raise ValueError("Repeat interval must be between 1 and 365.")
+        description = description.strip()
+        if not description:
+            raise ValueError("Description cannot be empty.")
+        due = start_date or date.today().isoformat()
+        try:
+            date.fromisoformat(due)
+        except ValueError as error:
+            raise ValueError("Start date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            if project_id is not None:
+                project = connection.execute(
+                    "SELECT venture_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if project is None or project["venture_id"] != venture_id:
+                    raise ValueError("Linked project must belong to the selected venture.")
+            cursor = connection.execute(
+                """INSERT INTO recurring_obligations
+                   (venture_id, project_id, obligation_type, amount, description,
+                    frequency, frequency_interval, next_due_date)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (venture_id, project_id, obligation_type, value, description,
+                 frequency, frequency_interval, due),
+            )
+            return int(cursor.lastrowid)
+
+    def list_recurring_obligations(
+        self, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = """SELECT recurring_obligations.*, ventures.name AS venture_name
+                   FROM recurring_obligations
+                   JOIN ventures ON ventures.id = recurring_obligations.venture_id"""
+        values: tuple[Any, ...] = ()
+        if status is not None:
+            if status not in {"active", "paused", "completed"}:
+                raise ValueError("Invalid recurring obligation status.")
+            query += " WHERE recurring_obligations.status = ?"
+            values = (status,)
+        query += " ORDER BY next_due_date, recurring_obligations.id"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, values)]
+
+    def set_recurring_obligation_status(self, rule_id: int, status: str) -> None:
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError("Status must be active, paused or completed.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE recurring_obligations SET status = ? WHERE id = ?",
+                (status, rule_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Recurring obligation rule {rule_id} does not exist.")
+
+    def generate_recurring_obligations(
+        self, through: date | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Create due receivable/payable records without settling or paying them."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("Generation limit must be between 1 and 1000.")
+        as_of = through or date.today()
+        created: list[dict[str, Any]] = []
+        with self._connect() as connection:
+            rules = connection.execute(
+                """SELECT recurring_obligations.*, ventures.status AS venture_status,
+                          ventures.name AS venture_name
+                   FROM recurring_obligations
+                   JOIN ventures ON ventures.id = recurring_obligations.venture_id
+                   WHERE recurring_obligations.status = 'active'
+                     AND ventures.status = 'active'
+                     AND recurring_obligations.next_due_date <= ?
+                   ORDER BY recurring_obligations.next_due_date, recurring_obligations.id""",
+                (as_of.isoformat(),),
+            ).fetchall()
+            remaining = limit
+            for row in rules:
+                rule = dict(row)
+                due = date.fromisoformat(rule["next_due_date"])
+                while due <= as_of and remaining > 0:
+                    cursor = connection.execute(
+                        """INSERT INTO financial_obligations
+                           (venture_id, project_id, obligation_type, amount, due_date, description)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (rule["venture_id"], rule["project_id"], rule["obligation_type"],
+                         rule["amount"], due.isoformat(), rule["description"]),
+                    )
+                    created.append({
+                        "obligation_id": int(cursor.lastrowid),
+                        "recurring_id": rule["id"],
+                        "venture_name": rule["venture_name"],
+                        "obligation_type": rule["obligation_type"],
+                        "amount": rule["amount"],
+                        "due_date": due.isoformat(),
+                        "description": rule["description"],
+                    })
+                    due = self._next_recurring_date(
+                        due, rule["frequency"], rule["frequency_interval"]
+                    )
+                    remaining -= 1
+                connection.execute(
+                    "UPDATE recurring_obligations SET next_due_date = ? WHERE id = ?",
+                    (due.isoformat(), rule["id"]),
+                )
+                if remaining == 0:
+                    break
+        return created
 
     def add_obligation(
         self, venture_id: int, obligation_type: str, amount: float,
@@ -1234,6 +1374,7 @@ class SageStore:
             "recurring_tasks": self.list_recurring_tasks()[:30],
             "pending_task_proposals": self.list_task_proposals("pending")[:30],
             "open_obligations": self.list_obligations("open")[:30],
+            "recurring_obligations": self.list_recurring_obligations()[:30],
         }
 
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -1270,17 +1411,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6}:
+        if version not in {1, 2, 3, 4, 5, 6, 7}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4, 5} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations"}:
+            if table not in data and version in {1, 2, 3, 4, 5, 6} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1450,7 +1591,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 6,
+                "version": 7,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
