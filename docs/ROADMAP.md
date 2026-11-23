@@ -49,7 +49,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] AI-generated suggestions labeled advisory-only; no automatic database mutations (CI-verified)
 - [x] Local cockpit AI Advisor with explicit context-consent checkbox (CI-verified)
 - [x] Evidence-only daily executive briefing in CLI and local cockpit; one master action, project actions, risks and missing inputs (84 local tests passing)
-- [x] Optional AI interpretation of the daily briefing with explicit context-transmission approval (unit-tested; live provider call not claimed)
+- [x] Optional AI interpretation of the daily briefing with explicit context-transmission approval (unit-tested; local Qwen3 endpoint smoke-tested end-to-end using synthetic records only)
 - [x] Human approval queue for task proposals; approval creates the task, rejection records the decision (CI-verified)
 - [ ] Approval gates for future external actions and automated workflows
 
