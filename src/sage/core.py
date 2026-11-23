@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS resource_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venture_id INTEGER NOT NULL,
+    project_id INTEGER,
+    entry_type TEXT NOT NULL CHECK (entry_type IN ('expense', 'time')),
+    quantity REAL NOT NULL CHECK (quantity > 0),
+    entry_date TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venture_id) REFERENCES ventures(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
 """
 
 
@@ -173,9 +186,68 @@ class SageStore:
             if cursor.rowcount == 0:
                 raise ValueError(f"Project {project_id} does not exist.")
 
-    def portfolio_summary(self) -> dict[str, Any]:
+
+    def log_resource(
+        self, venture_id: int, entry_type: str, quantity: float,
+        entry_date: str | None = None, project_id: int | None = None, note: str = "",
+    ) -> int:
+        """Record actual rupee expense or hours worked against a venture."""
+        if entry_type not in {"expense", "time"}:
+            raise ValueError("Resource entry type must be expense or time.")
+        amount = self._optional_nonnegative_number(quantity, "Resource quantity")
+        if amount is None or amount <= 0:
+            raise ValueError("Resource quantity must be greater than zero.")
+        day = entry_date or date.today().isoformat()
+        try:
+            date.fromisoformat(day)
+        except ValueError as error:
+            raise ValueError("Entry date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            if project_id is not None:
+                project = connection.execute(
+                    "SELECT venture_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if project is None:
+                    raise ValueError(f"Project {project_id} does not exist.")
+                if project["venture_id"] != venture_id:
+                    raise ValueError("Linked project must belong to the selected venture.")
+            cursor = connection.execute(
+                """INSERT INTO resource_entries
+                   (venture_id, project_id, entry_type, quantity, entry_date, note)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (venture_id, project_id, entry_type, amount, day, note.strip()),
+            )
+            return int(cursor.lastrowid)
+
+    def list_resource_entries(
+        self, venture_id: int | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("Resource entry limit must be between 1 and 1000.")
+        query = """SELECT resource_entries.*, ventures.name AS venture_name,
+                          projects.name AS project_name
+                   FROM resource_entries
+                   JOIN ventures ON ventures.id = resource_entries.venture_id
+                   LEFT JOIN projects ON projects.id = resource_entries.project_id"""
+        values: tuple[Any, ...] = ()
+        if venture_id is not None:
+            query += " WHERE resource_entries.venture_id = ?"
+            values = (venture_id,)
+        query += " ORDER BY entry_date DESC, id DESC LIMIT ?"
+        values += (limit,)
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, values)]
+
+    def portfolio_summary(self, today: date | None = None) -> dict[str, Any]:
         """Summarize venture ownership and explicitly entered resource caps."""
         ventures = self.list_ventures()
+        as_of = today or date.today()
+        month_start = as_of.replace(day=1).isoformat()
+        week_start = (as_of - timedelta(days=as_of.weekday())).isoformat()
         with self._connect() as connection:
             summaries = []
             for venture in ventures:
@@ -188,12 +260,29 @@ class SageStore:
                        WHERE p.venture_id = ?""",
                     (venture["id"],),
                 ).fetchone()
+                usage = connection.execute(
+                    """SELECT
+                         COALESCE(SUM(CASE WHEN entry_type = 'expense'
+                           AND entry_date BETWEEN ? AND ? THEN quantity ELSE 0 END), 0) AS month_spend,
+                         COALESCE(SUM(CASE WHEN entry_type = 'time'
+                           AND entry_date BETWEEN ? AND ? THEN quantity ELSE 0 END), 0) AS week_hours
+                       FROM resource_entries WHERE venture_id = ?""",
+                    (month_start, as_of.isoformat(), week_start, as_of.isoformat(), venture["id"]),
+                ).fetchone()
+                month_spend = float(usage["month_spend"])
+                week_hours = float(usage["week_hours"])
+                budget_cap = venture["monthly_budget_cap"]
+                hours_cap = venture["weekly_hours_cap"]
                 summaries.append({
                     **venture,
                     "projects": int(row["projects"] or 0),
                     "active_projects": int(row["active_projects"] or 0),
                     "open_tasks": int(row["open_tasks"] or 0),
                     "in_progress_tasks": int(row["in_progress_tasks"] or 0),
+                    "month_spend": month_spend,
+                    "month_budget_remaining": budget_cap - month_spend if budget_cap is not None else None,
+                    "week_hours_used": week_hours,
+                    "week_hours_remaining": hours_cap - week_hours if hours_cap is not None else None,
                 })
             unassigned = connection.execute(
                 "SELECT COUNT(*) FROM projects WHERE venture_id IS NULL"
@@ -574,7 +663,7 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
