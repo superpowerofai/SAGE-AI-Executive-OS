@@ -85,6 +85,21 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS financial_obligations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venture_id INTEGER NOT NULL,
+    project_id INTEGER,
+    obligation_type TEXT NOT NULL CHECK (obligation_type IN ('receivable', 'payable')),
+    amount REAL NOT NULL CHECK (amount > 0),
+    due_date TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'cancelled')),
+    settled_date TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venture_id) REFERENCES ventures(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS task_proposals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -509,6 +524,118 @@ class SageStore:
             return [dict(row) for row in connection.execute(query, values)]
 
 
+
+
+    def add_obligation(
+        self, venture_id: int, obligation_type: str, amount: float,
+        due_date: str, description: str, project_id: int | None = None,
+    ) -> int:
+        value = self._optional_nonnegative_number(amount, "Obligation amount")
+        if value is None or value <= 0:
+            raise ValueError("Obligation amount must be greater than zero.")
+        if obligation_type not in {"receivable", "payable"}:
+            raise ValueError("Obligation type must be receivable or payable.")
+        try:
+            date.fromisoformat(due_date)
+        except ValueError as error:
+            raise ValueError("Due date must use YYYY-MM-DD format.") from error
+        description = description.strip()
+        if not description:
+            raise ValueError("Obligation description cannot be empty.")
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            if project_id is not None:
+                project = connection.execute(
+                    "SELECT venture_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if project is None or project["venture_id"] != venture_id:
+                    raise ValueError("Linked project must belong to the selected venture.")
+            cursor = connection.execute(
+                """INSERT INTO financial_obligations
+                   (venture_id, project_id, obligation_type, amount, due_date, description)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (venture_id, project_id, obligation_type, value, due_date, description),
+            )
+            return int(cursor.lastrowid)
+
+    def list_obligations(
+        self, status: str | None = None, venture_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        query = """SELECT financial_obligations.*, ventures.name AS venture_name,
+                          projects.name AS project_name
+                   FROM financial_obligations
+                   JOIN ventures ON ventures.id = financial_obligations.venture_id
+                   LEFT JOIN projects ON projects.id = financial_obligations.project_id"""
+        clauses: list[str] = []
+        values: list[Any] = []
+        if status is not None:
+            if status not in {"open", "settled", "cancelled"}:
+                raise ValueError("Invalid obligation status.")
+            clauses.append("financial_obligations.status = ?")
+            values.append(status)
+        if venture_id is not None:
+            clauses.append("financial_obligations.venture_id = ?")
+            values.append(venture_id)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY due_date, financial_obligations.id"
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, tuple(values))]
+
+    def settle_obligation(self, obligation_id: int, settled_date: str | None = None) -> int:
+        day = settled_date or date.today().isoformat()
+        try:
+            date.fromisoformat(day)
+        except ValueError as error:
+            raise ValueError("Settlement date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            obligation = connection.execute(
+                "SELECT * FROM financial_obligations WHERE id = ?", (obligation_id,)
+            ).fetchone()
+            if obligation is None:
+                raise ValueError(f"Obligation {obligation_id} does not exist.")
+            if obligation["status"] != "open":
+                raise ValueError("Only open obligations can be settled.")
+            if obligation["obligation_type"] == "receivable":
+                cursor = connection.execute(
+                    """INSERT INTO income_entries
+                       (venture_id, project_id, amount, entry_date, note)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (obligation["venture_id"], obligation["project_id"],
+                     obligation["amount"], day, obligation["description"]),
+                )
+            else:
+                cursor = connection.execute(
+                    """INSERT INTO resource_entries
+                       (venture_id, project_id, entry_type, quantity, entry_date, note)
+                       VALUES (?, ?, 'expense', ?, ?, ?)""",
+                    (obligation["venture_id"], obligation["project_id"],
+                     obligation["amount"], day, obligation["description"]),
+                )
+            connection.execute(
+                """UPDATE financial_obligations SET status = 'settled',
+                   settled_date = ? WHERE id = ?""",
+                (day, obligation_id),
+            )
+            return int(cursor.lastrowid)
+
+    def cancel_obligation(self, obligation_id: int) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE financial_obligations SET status = 'cancelled'
+                   WHERE id = ? AND status = 'open'""",
+                (obligation_id,),
+            )
+            if cursor.rowcount == 0:
+                exists = connection.execute(
+                    "SELECT 1 FROM financial_obligations WHERE id = ?", (obligation_id,)
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"Obligation {obligation_id} does not exist.")
+                raise ValueError("Only open obligations can be cancelled.")
 
     def create_task_proposal(
         self, project_id: int, title: str, rationale: str = "",
@@ -1070,6 +1197,7 @@ class SageStore:
             "recent_resource_entries": self.list_resource_entries(limit=30),
             "recurring_tasks": self.list_recurring_tasks()[:30],
             "pending_task_proposals": self.list_task_proposals("pending")[:30],
+            "open_obligations": self.list_obligations("open")[:30],
         }
 
     def backup(self, destination: str | Path, overwrite: bool = False) -> Path:
@@ -1106,17 +1234,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5}:
+        if version not in {1, 2, 3, 4, 5, 6}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals"}:
+            if table not in data and version in {1, 2, 3, 4, 5} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1286,7 +1414,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 5,
+                "version": 6,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
