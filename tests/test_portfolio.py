@@ -126,3 +126,25 @@ def test_resource_log_rejects_zero_or_invalid_quantity(tmp_path):
             assert False, "invalid resource quantity must fail"
         except ValueError:
             pass
+
+
+def test_allocation_signal_uses_priority_and_actual_cap_usage(tmp_path):
+    from datetime import date
+
+    store = SageStore(tmp_path / "signals.db")
+    priority = store.add_venture(
+        "Priority venture", monthly_budget_cap=10000, weekly_hours_cap=10,
+        strategic_priority=1,
+    )
+    project = store.add_project("Approved work", venture_id=priority)
+    store.add_task(project, "Next action")
+    store.log_resource(priority, "expense", 2500, "2026-11-23")
+    store.log_resource(priority, "time", 3, "2026-11-23")
+
+    signal = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]["allocation_signal"]
+    assert "Highest user-set priority" in signal
+    assert "cap headroom" in signal
+
+    store.log_resource(priority, "expense", 9000, "2026-11-23")
+    signal = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]["allocation_signal"]
+    assert "cap exceeded" in signal
