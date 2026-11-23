@@ -379,7 +379,8 @@ def main(argv: list[str] | None = None) -> int:
             for project in store.list_projects():
                 print(
                     f"#{project['id']} [{project['status']}] "
-                    f"{project['name']} — {project['description']}"
+                    f"{project['name']} — {project['description']} "
+                    f"(venture: {project.get('venture_name') or 'Unassigned'})"
                 )
         elif args.command == "add-task":
             task_id = store.add_task(
