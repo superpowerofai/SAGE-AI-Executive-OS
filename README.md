@@ -9,7 +9,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create projects with a name, optional description and optional venture owner.
 - Register ventures with strategic priority plus optional monthly budget and weekly hours caps.
 - Assign and reassign projects to ventures; compare project/task load and explicitly entered resource caps in a portfolio summary.
-- Log actual INR income, expenses and hours worked against ventures (optionally linked to a project); compare monthly income, expenses and net cash flow plus weekly time usage with caps, and see transparent rule-based allocation signals.
+- Log actual INR income, expenses and hours worked against ventures (optionally linked to a project); track receivables and payables, settle them into actual ledger entries, and see a 30-day obligation forecast. Compare monthly income, expenses and net cash flow plus weekly time usage with caps.
 - Submit proposed tasks to a human approval queue; only approved proposals become executable tasks, and rejected proposals remain recorded.
 - Create recurring daily, weekly or monthly task rules, pause/resume them, and generate due instances on demand with a safe per-run limit.
 - Edit project names/descriptions and task titles/priorities/due dates; archive projects and tasks by marking them completed/done.
@@ -98,6 +98,9 @@ sage add-project "Lead follow-up system" --venture-id 1
 sage ventures
 sage log-expense 1 1250 --note "Hosting"
 sage log-income 1 9500 --note "Client payment"
+sage add-obligation 1 receivable 25000 2026-12-01 "Client invoice"
+sage obligations --status open
+sage settle-obligation 1
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
 sage export-ics exports/sage-calendar.ics
