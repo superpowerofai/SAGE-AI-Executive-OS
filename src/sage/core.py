@@ -572,7 +572,7 @@ class SageStore:
         created: list[dict[str, Any]] = []
         with self._connect() as connection:
             rules = connection.execute(
-                """SELECT recurring_tasks.*, projects.status AS project_status
+                """SELECT recurring_tasks.*, projects.name AS project_name, projects.status AS project_status
                    FROM recurring_tasks JOIN projects ON projects.id = recurring_tasks.project_id
                    WHERE recurring_tasks.status = 'active'
                      AND projects.status = 'active'
