@@ -6,12 +6,15 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 
 ## Current capabilities
 
-- Create projects with a name and optional description.
+- Create projects with a name, optional description and optional venture owner.
+- Register ventures with strategic priority plus optional monthly budget and weekly hours caps.
+- Assign and reassign projects to ventures; compare project/task load and explicitly entered resource caps in a portfolio summary.
 - Track project status: active, paused, completed.
 - Add tasks with priority 1 (highest) through 5 (lowest).
 - Track task status: todo, in_progress, done.
 - List tasks ordered by status and priority.
-- View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.\n- Launch a browser-based local cockpit to create projects/tasks, update statuses, record daily reviews, and manage blockers.
+- View an executive cockpit with portfolio counts, master focus, open blockers, and the latest daily review.
+- Launch a browser-based local cockpit to create projects/tasks, update statuses, record daily reviews, and manage blockers.
 - View a focus summary showing active and paused projects plus one next action from active projects.
 - View a 7-day or 30-day execution plan grouped into overdue, upcoming, and unscheduled active work.
 - Save a daily executive review with one priority, wins, blockers, and tomorrow's first move; update a date's review without creating duplicates.
@@ -20,7 +23,9 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Keep a decision journal with context, chosen option, rationale, and optional revisit date.
 - Track open and resolved blockers, optionally linked to a project or task.
 - Validate new due dates in YYYY-MM-DD format. The command selects one open task from active projects, preferring in-progress work, then higher priority, and excludes paused projects and completed tasks.
-- Persist data in a local SQLite database.\n- Create an integrity-checked SQLite backup without interrupting normal reads.\n- Export all stored records (projects, tasks, daily reviews, decisions, blockers) to versioned UTF-8 JSON.
+- Persist data in a local SQLite database.
+- Create an integrity-checked SQLite backup without interrupting normal reads.
+- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers) to versioned UTF-8 JSON.
 
 ## Requirements
 
@@ -80,6 +85,9 @@ View the focus summary:
 
 ```bash
 sage focus
+sage add-venture "OPERONIX AI" --priority 1 --monthly-budget-cap 25000 --weekly-hours-cap 18
+sage add-project "Lead follow-up system" --venture-id 1
+sage ventures
 sage plan --days 7
 sage plan --days 30
 ```
@@ -101,7 +109,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 
 ## Architecture
 
-- `src/sage/core.py`: SQLite schema, project/task operations, backup and JSON export.
+- `src/sage/core.py`: SQLite schema/migrations, venture portfolio, project/task operations, backup and JSON export.
 - `src/sage/cli.py`: command-line interface.
 - `src/sage/__main__.py`: `python -m sage` entry point.
 - `tests/`: configuration, core behavior and CLI workflow tests.
