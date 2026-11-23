@@ -15,6 +15,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     project_actions = store.project_next_actions()
     recurring_rules = store.list_recurring_tasks()
     proposals = store.list_task_proposals()
+    obligations = store.list_obligations()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -45,6 +46,15 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='12'>No ventures registered yet.</td></tr>"
+    obligation_rows = "".join(
+        f"<tr><td>#{o['id']}</td><td>{e(o['venture_name'])}</td><td>{e(o['obligation_type'])}</td>"
+        f"<td>INR {o['amount']:,.2f}</td><td>{e(o['due_date'])}</td><td>{e(o['description'])}</td>"
+        f"<td>{e(o['status'])}</td><td>" + (
+            f"<form method='post' action='/settle-obligation'><input type='hidden' name='id' value='{o['id']}'><button>Settle</button></form>"
+            f"<form method='post' action='/cancel-obligation'><input type='hidden' name='id' value='{o['id']}'><button class='secondary'>Cancel</button></form>"
+            if o["status"] == "open" else "—"
+        ) + "</td></tr>" for o in obligations
+    ) or "<tr><td colspan='8'>No financial obligations recorded.</td></tr>"
     proposal_rows = "".join(
         f"<tr><td>#{p['id']}</td><td>{e(p['project_name'])}</td><td>{e(p['title'])}</td>"
         f"<td>{e(p['rationale'])}</td><td>P{p['priority']}</td><td>{e(p['status'])}</td><td>"
@@ -128,6 +138,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>RECEIVABLES & PAYABLES</h2><p>Open obligations are forecasts, not cash balances. Settling one posts the actual income or expense to the ledger; cancelling does not.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Type</th><th>Amount</th><th>Due date</th><th>Description</th><th>Status</th><th>Actions</th></tr>{obligation_rows}</table></div>
+<form method='post' action='/add-obligation'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='obligation_type'><option value='receivable'>Receivable</option><option value='payable'>Payable</option></select><input name='amount' type='number' min='0.01' step='0.01' placeholder='Amount INR' required><input name='due_date' type='date' required><input name='description' placeholder='What is owed / due?' required><button>Add obligation</button></form></section>
 <section><h2>HUMAN APPROVAL QUEUE</h2><p>Proposed tasks do not enter the execution plan until you approve them. Approval creates the task; rejection records the decision.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Proposed task</th><th>Rationale</th><th>Priority</th><th>Status</th><th>Decision</th></tr>{proposal_rows}</table></div>
 <form method='post' action='/propose-task'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects)}</select><input name='title' placeholder='Proposed next task' required><input name='rationale' placeholder='Why this task?'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='due_date' type='date'><button>Submit for approval</button></form></section>
@@ -214,7 +227,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -236,6 +249,19 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/add-obligation":
+                    store.add_obligation(
+                        int(data["venture_id"]), data.get("obligation_type", "receivable"),
+                        float(data.get("amount", "0")), data.get("due_date", ""),
+                        data.get("description", ""),
+                    )
+                    notice = "Financial obligation recorded."
+                elif path == "/settle-obligation":
+                    store.settle_obligation(int(data["id"]))
+                    notice = "Obligation settled and posted to the actual ledger."
+                elif path == "/cancel-obligation":
+                    store.cancel_obligation(int(data["id"]))
+                    notice = "Obligation cancelled."
                 elif path == "/propose-task":
                     store.create_task_proposal(
                         int(data["project_id"]), data.get("title", ""),
