@@ -79,6 +79,17 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path):
     assert "Project created." in project_page
     assert next(p for p in store.list_projects() if p["name"] == "Sales automation")["venture_id"] == venture_id
 
+    resource_request = Request(
+        url + "/log-resource",
+        data=f"venture_id={venture_id}&entry_type=expense&quantity=1250&note=Hosting".encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(resource_request, timeout=2) as response:
+        resource_page = response.read().decode()
+    assert "Resource entry recorded." in resource_page
+    assert store.list_resource_entries(venture_id)[0]["quantity"] == 1250
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
