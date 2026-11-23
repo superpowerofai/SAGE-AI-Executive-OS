@@ -425,6 +425,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "resolve-blocker":
             store.resolve_blocker(args.blocker_id)
             print(f"Resolved blocker #{args.blocker_id}")
+        elif args.command == "serve":
+            from .web import serve
+            serve(store, args.host, args.port)
         elif args.command == "backup":
             destination = store.backup(args.destination, overwrite=args.force)
             print(f"Database backup created: {destination}")
