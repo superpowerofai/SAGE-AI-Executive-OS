@@ -115,6 +115,8 @@ Use `--db path/to/file.db` before any command to choose a database file. By defa
 
 You can also launch the CLI with `python -m sage` after installing the package.
 
+On Windows, double-click `start_sage.bat` from the project folder to launch the local cockpit. It uses `runtime/data/sage.db` and binds only to `127.0.0.1:8765`. Keep the terminal window open while using the cockpit.
+
 ## Optional AI suggestions
 
 SAGE supports OpenAI-compatible chat-completion endpoints. It does not store API credentials.
