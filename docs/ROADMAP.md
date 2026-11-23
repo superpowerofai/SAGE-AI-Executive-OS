@@ -38,6 +38,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Provider-neutral OpenAI-compatible chat-completion adapter (CI-verified)
 - [x] Bounded context preview and explicit opt-in before external transmission (CI-verified)
 - [x] AI-generated suggestions labeled advisory-only; no automatic database mutations (CI-verified)
+- [x] Local cockpit AI Advisor with explicit context-consent checkbox (CI-verified)
 - [ ] Human approval for consequential actions
 
 ## Release discipline
