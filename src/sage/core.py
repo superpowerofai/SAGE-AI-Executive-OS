@@ -369,6 +369,7 @@ class SageStore:
         as_of = today or date.today()
         month_start = as_of.replace(day=1).isoformat()
         week_start = (as_of - timedelta(days=as_of.weekday())).isoformat()
+        forecast_end = (as_of + timedelta(days=30)).isoformat()
         with self._connect() as connection:
             summaries = []
             for venture in ventures:
@@ -398,6 +399,23 @@ class SageStore:
                     (venture["id"], month_start, as_of.isoformat()),
                 ).fetchone()[0]
                 month_revenue = float(income_usage)
+                obligations = connection.execute(
+                    """SELECT
+                         COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
+                           AND status = 'open' THEN amount ELSE 0 END), 0) AS receivables,
+                         COALESCE(SUM(CASE WHEN obligation_type = 'payable'
+                           AND status = 'open' THEN amount ELSE 0 END), 0) AS payables,
+                         COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
+                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_receivables,
+                         COALESCE(SUM(CASE WHEN obligation_type = 'payable'
+                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_payables
+                       FROM financial_obligations WHERE venture_id = ?""",
+                    (as_of.isoformat(), forecast_end, as_of.isoformat(), forecast_end, venture["id"]),
+                ).fetchone()
+                open_receivables = float(obligations["receivables"])
+                open_payables = float(obligations["payables"])
+                due_receivables_30d = float(obligations["due_receivables"])
+                due_payables_30d = float(obligations["due_payables"])
                 budget_cap = venture["monthly_budget_cap"]
                 hours_cap = venture["weekly_hours_cap"]
                 active_projects = int(row["active_projects"] or 0)
@@ -415,6 +433,8 @@ class SageStore:
                     hours_remaining is not None and hours_remaining < 0
                 ):
                     signal = "Recorded cap exceeded: review commitments before adding resources."
+                elif due_payables_30d > due_receivables_30d:
+                    signal = "Recorded payables due within 30 days exceed recorded receivables; cash balance is unknown, so review liquidity before new commitments."
                 elif active_projects == 0:
                     signal = "No active projects: decide whether to start work or keep this venture paused."
                 elif venture["strategic_priority"] == 1 and missing_caps:
@@ -432,6 +452,11 @@ class SageStore:
                     "month_spend": month_spend,
                     "month_revenue": month_revenue,
                     "month_net_cash_flow": month_revenue - month_spend,
+                    "open_receivables": open_receivables,
+                    "open_payables": open_payables,
+                    "receivables_due_30d": due_receivables_30d,
+                    "payables_due_30d": due_payables_30d,
+                    "expected_obligation_cashflow_30d": due_receivables_30d - due_payables_30d,
                     "month_budget_remaining": budget_remaining,
                     "week_hours_used": week_hours,
                     "week_hours_remaining": hours_remaining,
