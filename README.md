@@ -98,7 +98,7 @@ sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
 sage backup backups/sage.db
 sage export-json exports/sage.json
-sage import-json exports/sage.json  # use a new, empty database
+sage --db data/imported.db import-json exports/sage.json  # new, empty database
 sage restore backups/sage.db --yes
 sage plan --days 7
 sage plan --days 30
@@ -151,7 +151,7 @@ The SAGE CI workflow runs the automated test suite on pushes, pull requests, and
 ## Current limitations
 
 - Local single-user database; no cloud sync or hosted accounts.
-- The web cockpit is intentionally local-only; it does not yet provide user accounts, remote access, or cloud sync.
+- The web cockpit is intentionally local-only; it does not yet provide user accounts, remote access, or cloud sync. It checks Host/Origin headers, blocks cross-origin mutations, and applies restrictive browser security headers.
 - No AI model or external messaging integration.
 - No recurring tasks, calendar sync, or multi-user permissions. Daily reviews are manually entered; SAGE does not yet infer wins or blockers from external apps.
 - Due dates are stored as supplied; advanced date validation and reminders are not implemented.
