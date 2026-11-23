@@ -10,7 +10,7 @@ import math
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -944,6 +944,72 @@ class SageStore:
         finally:
             if temporary.exists():
                 temporary.unlink()
+
+
+    @staticmethod
+    def _ics_escape(value: str) -> str:
+        return (
+            value.replace("\\\\", "\\\\\\\\")
+            .replace(";", "\\\\;")
+            .replace(",", "\\\\,")
+            .replace("\\r\\n", "\\\\n")
+            .replace("\\n", "\\\\n")
+            .replace("\\r", "")
+        )
+
+    def export_calendar(self, destination: str | Path, overwrite: bool = False) -> Path:
+        """Export open tasks with due dates from active projects as all-day ICS events."""
+        target = Path(destination).expanduser().resolve()
+        if target.exists() and not overwrite:
+            raise ValueError(f"Calendar export already exists: {target} (use --force to replace it).")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT tasks.*, projects.name AS project_name,
+                          ventures.name AS venture_name
+                   FROM tasks
+                   JOIN projects ON projects.id = tasks.project_id
+                   LEFT JOIN ventures ON ventures.id = projects.venture_id
+                   WHERE projects.status = 'active'
+                     AND tasks.status != 'done'
+                     AND tasks.due_date IS NOT NULL
+                   ORDER BY tasks.due_date, tasks.priority, tasks.id"""
+            ).fetchall()
+        lines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//SAGE//Executive OS//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+        ]
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        for row in rows:
+            task = dict(row)
+            due = date.fromisoformat(task["due_date"])
+            description = (
+                f"Project: {task['project_name']}\\n"
+                f"Venture: {task['venture_name'] or 'Unassigned'}\\n"
+                f"Priority: P{task['priority']}\\nStatus: {task['status']}"
+            )
+            lines.extend([
+                "BEGIN:VEVENT",
+                f"UID:sage-task-{task['id']}@local.sage",
+                f"DTSTAMP:{stamp}",
+                f"DTSTART;VALUE=DATE:{due.strftime('%Y%m%d')}",
+                f"DTEND;VALUE=DATE:{(due + timedelta(days=1)).strftime('%Y%m%d')}",
+                f"SUMMARY:{self._ics_escape(task['title'])}",
+                f"DESCRIPTION:{self._ics_escape(description)}",
+                "END:VEVENT",
+            ])
+        lines.append("END:VCALENDAR")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".tmp")
+        try:
+            temporary.write_text("\\r\\n".join(lines) + "\\r\\n", encoding="utf-8")
+            temporary.replace(target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return target
 
     def export_data(self, destination: str | Path, overwrite: bool = False) -> Path:
         """Export all SAGE records as portable, versioned UTF-8 JSON."""
