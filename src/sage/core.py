@@ -549,7 +549,7 @@ class SageStore:
                 raise ValueError("Invalid task proposal status.")
             query += " WHERE task_proposals.status = ?"
             values = (status,)
-        query += " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, id DESC"
+        query += " ORDER BY CASE task_proposals.status WHEN 'pending' THEN 0 ELSE 1 END, task_proposals.id DESC"
         with self._connect() as connection:
             return [dict(row) for row in connection.execute(query, values)]
 
