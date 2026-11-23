@@ -42,7 +42,8 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Bounded context preview and explicit opt-in before external transmission (CI-verified)
 - [x] AI-generated suggestions labeled advisory-only; no automatic database mutations (CI-verified)
 - [x] Local cockpit AI Advisor with explicit context-consent checkbox (CI-verified)
-- [ ] Human approval queue for structured proposals and consequential external actions
+- [x] Human approval queue for task proposals; approval creates the task, rejection records the decision (CI-verified)
+- [ ] Approval gates for future external actions and automated workflows
 
 ## v0.5 — Local desktop operations\n\n- [x] Windows one-click launcher and desktop shortcut\n- [x] Local Ollama connection with context preview and explicit consent\n- [x] Local-only HTTP cockpit with Host/Origin checks and security headers\n- [ ] User authentication, multi-device sync and hosted deployment\n- [ ] Two-way calendar and email integrations\n\n## Release discipline
 
