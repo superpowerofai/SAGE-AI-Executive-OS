@@ -28,7 +28,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Persist data in a local SQLite database.
 - Create an integrity-checked SQLite backup without interrupting normal reads.
 - Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
-- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON.
+- Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers and resource entries) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
 - Preview the exact bounded business context prepared for AI; external transmission requires the explicit `--send-context` flag.
 - Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
 
@@ -97,6 +97,8 @@ sage log-expense 1 1250 --note "Hosting"
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
 sage backup backups/sage.db
+sage export-json exports/sage.json
+sage import-json exports/sage.json  # use a new, empty database
 sage restore backups/sage.db --yes
 sage plan --days 7
 sage plan --days 30
