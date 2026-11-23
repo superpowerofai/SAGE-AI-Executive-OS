@@ -16,6 +16,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     recurring_rules = store.list_recurring_tasks()
     proposals = store.list_task_proposals()
     action_requests = store.list_action_requests()
+    action_events = store.list_action_events(limit=30)
     obligations = store.list_obligations()
     recurring_obligations = store.list_recurring_obligations()
     cash_positions = store.list_cash_positions()
@@ -108,6 +109,11 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
             if a['status'] == 'pending' else "—"
         ) + "</td></tr>" for a in action_requests
     ) or "<tr><td colspan='6'>No action requests.</td></tr>"
+    action_event_rows = "".join(
+        f"<tr><td>#{event['action_request_id']}</td><td>{e(event['event_type'])}</td>"
+        f"<td>{e(event['created_at'])}</td><td>{e(event['details'])}</td></tr>"
+        for event in action_events
+    ) or "<tr><td colspan='4'>No action events recorded.</td></tr>"
     project_action_rows = "".join(
         f"<li><strong>{e(a['venture_name'] or 'Unassigned')} · {e(a['project_name'])}</strong>: "
         f"{e(a['task_title']) if a['task_id'] is not None else 'No open task — add the first action'}"
@@ -191,6 +197,8 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <section><h2>CONTROLLED ACTIONS</h2><p>Only allow-listed actions can run. Requests are inert until you approve them. Current built-in action: create a local calendar export in the SAGE exports folder. No email, payment, or remote action is enabled.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Action</th><th>Preview</th><th>Status</th><th>Result</th><th>Decision</th></tr>{action_rows}</table></div>
 <form method='post' action='/request-calendar-export'><input name='filename' value='sage-calendar.ics' required><button>Request calendar export (approval required)</button></form></section>
+<section><h2>ACTION AUDIT HISTORY</h2><p>Append-only event history. Changes and deletion of audit events are blocked by the local database.</p>
+<div class='scroll'><table><tr><th>Request</th><th>Event</th><th>Time</th><th>Details</th></tr>{action_event_rows}</table></div></section>
 <section><h2>RECURRING TASKS</h2><p>Rules generate dated task instances only when you press Generate due tasks. Generation is bounded to 100 instances per request.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Task</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_rows}</table></div>
 <form method='post' action='/add-recurring'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects if p['status'] == 'active')}</select><input name='title' placeholder='Recurring task' required><select name='frequency'><option>daily</option><option selected>weekly</option><option>monthly</option></select><input name='every' type='number' min='1' max='365' value='1' title='Repeat every N units'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='start_date' type='date'><button>Add recurring rule</button></form>
