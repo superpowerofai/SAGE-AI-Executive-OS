@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.venture_id, kind, quantity, args.entry_date, args.project_id, args.note
             )
             unit = "₹" if kind == "expense" else "hours"
-            print(f"Recorded {kind} #{entry_id}: {unit}{quantity} for venture #{args.venture_id}")
+            print(f"Recorded {kind} #{entry_id}: {quantity} {unit} for venture #{args.venture_id}")
         elif args.command == "resources":
             entries = store.list_resource_entries(args.venture_id, args.limit)
             print(f"SAGE RESOURCE LOG ({len(entries)})")
