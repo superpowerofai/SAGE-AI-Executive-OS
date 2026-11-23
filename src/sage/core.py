@@ -104,7 +104,10 @@ class SageStore:
     """Small SQLite-backed store for projects and their next actions."""
 
     def __init__(self, database: str | Path = "sage.db") -> None:
-        self.database = str(database)
+        database_path = Path(database).expanduser()
+        if str(database) != ":memory:":
+            database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.database = str(database_path)
         with self._connect() as connection:
             connection.executescript(SCHEMA)
             project_columns = {
