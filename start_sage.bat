@@ -19,7 +19,12 @@ if errorlevel 1 (
     echo Starting SAGE local executive cockpit...
     echo Local AI endpoint: %SAGE_AI_BASE_URL%
     echo AI model: %SAGE_AI_MODEL%
-    start "SAGE Server" /B "%~dp0.venv\Scripts\python.exe" -m sage --db "%~dp0runtime\data\sage.db" serve --host 127.0.0.1 --port 8765
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start_sage_server.ps1"
+    if errorlevel 1 (
+        echo Failed to start SAGE server.
+        pause
+        exit /b 1
+    )
     timeout /t 3 /nobreak >nul
 )
 
@@ -32,6 +37,6 @@ if errorlevel 1 (
 
 start "" "http://127.0.0.1:8765"
 echo SAGE is running at http://127.0.0.1:8765
-echo Keep this window open. Press Ctrl+C to stop the server.
+echo Close the SAGE Server window to stop the server.
 pause
 endlocal
