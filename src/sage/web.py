@@ -16,6 +16,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     recurring_rules = store.list_recurring_tasks()
     proposals = store.list_task_proposals()
     obligations = store.list_obligations()
+    recurring_obligations = store.list_recurring_obligations()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -48,6 +49,15 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='15'>No ventures registered yet.</td></tr>"
+    recurring_obligation_rows = "".join(
+        f"<tr><td>#{rule['id']}</td><td>{e(rule['venture_name'])}</td><td>{e(rule['obligation_type'])}</td>"
+        f"<td>INR {rule['amount']:,.2f}</td><td>{e(rule['description'])}</td>"
+        f"<td>{e(rule['frequency'])} × {rule['frequency_interval']}</td>"
+        f"<td>{e(rule['next_due_date'])}</td><td>{e(rule['status'])}</td><td>"
+        f"<form method='post' action='/recurring-obligation-status'><input type='hidden' name='id' value='{rule['id']}'>"
+        f"<select name='status'><option>active</option><option>paused</option><option>completed</option></select>"
+        f"<button>Update</button></form></td></tr>" for rule in recurring_obligations
+    ) or "<tr><td colspan='9'>No recurring financial rules.</td></tr>"
     obligation_rows = "".join(
         f"<tr><td>#{o['id']}</td><td>{e(o['venture_name'])}</td><td>{e(o['obligation_type'])}</td>"
         f"<td>INR {o['amount']:,.2f}</td><td>{e(o['due_date'])}</td><td>{e(o['description'])}</td>"
@@ -140,6 +150,10 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>RECURRING FINANCIAL OBLIGATIONS</h2><p>Rules generate future receivables/payables for review; they never pay or collect automatically.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Type</th><th>Amount</th><th>Description</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_obligation_rows}</table></div>
+<form method='post' action='/add-recurring-obligation'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='obligation_type'><option value='payable'>Recurring cost / payable</option><option value='receivable'>Recurring income / receivable</option></select><input name='amount' type='number' min='0.01' step='0.01' placeholder='Amount INR' required><input name='description' placeholder='Rent, retainer, payroll...' required><select name='frequency'><option>daily</option><option>weekly</option><option selected>monthly</option></select><input name='every' type='number' min='1' max='365' value='1'><input name='start_date' type='date'><button>Add recurring financial rule</button></form>
+<form method='post' action='/generate-recurring-obligations'><button>Generate due obligations</button></form></section>
 <section><h2>RECEIVABLES & PAYABLES</h2><p>Open obligations are forecasts, not cash balances. Settling one posts the actual income or expense to the ledger; cancelling does not.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Type</th><th>Amount</th><th>Due date</th><th>Description</th><th>Status</th><th>Actions</th></tr>{obligation_rows}</table></div>
 <form method='post' action='/add-obligation'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='obligation_type'><option value='receivable'>Receivable</option><option value='payable'>Payable</option></select><input name='amount' type='number' min='0.01' step='0.01' placeholder='Amount INR' required><input name='due_date' type='date' required><input name='description' placeholder='What is owed / due?' required><button>Add obligation</button></form></section>
@@ -229,7 +243,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -251,6 +265,20 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/add-recurring-obligation":
+                    store.add_recurring_obligation(
+                        int(data["venture_id"]), data.get("obligation_type", "payable"),
+                        float(data.get("amount", "0")), data.get("description", ""),
+                        data.get("frequency", "monthly"), int(data.get("every", "1")),
+                        data.get("start_date") or None,
+                    )
+                    notice = "Recurring financial rule created."
+                elif path == "/recurring-obligation-status":
+                    store.set_recurring_obligation_status(int(data["id"]), data["status"])
+                    notice = "Recurring financial rule status updated."
+                elif path == "/generate-recurring-obligations":
+                    generated = store.generate_recurring_obligations(limit=100)
+                    notice = f"Generated {len(generated)} financial obligation(s)."
                 elif path == "/add-obligation":
                     store.add_obligation(
                         int(data["venture_id"]), data.get("obligation_type", "receivable"),
