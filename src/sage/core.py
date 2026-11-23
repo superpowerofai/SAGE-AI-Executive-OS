@@ -432,6 +432,41 @@ class SageStore:
             )
             return int(cursor.lastrowid)
 
+    def project_next_actions(self) -> list[dict[str, Any]]:
+        """Choose one non-completed next action for every active project."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT projects.id AS project_id, projects.name AS project_name,
+                          ventures.name AS venture_name, ventures.strategic_priority AS venture_priority,
+                          tasks.id AS task_id, tasks.title AS task_title,
+                          tasks.priority AS task_priority, tasks.status AS task_status,
+                          tasks.due_date AS due_date
+                   FROM projects
+                   LEFT JOIN ventures ON ventures.id = projects.venture_id
+                   LEFT JOIN tasks ON tasks.project_id = projects.id AND tasks.status != 'done'
+                   WHERE projects.status = 'active'
+                   ORDER BY COALESCE(ventures.strategic_priority, 3), projects.id,
+                            CASE tasks.status WHEN 'in_progress' THEN 0 ELSE 1 END,
+                            tasks.priority, (tasks.due_date IS NULL), tasks.due_date, tasks.id"""
+            ).fetchall()
+        actions: dict[int, dict[str, Any]] = {}
+        for row in rows:
+            item = dict(row)
+            project_id = item["project_id"]
+            if project_id not in actions:
+                actions[project_id] = {
+                    "project_id": project_id,
+                    "project_name": item["project_name"],
+                    "venture_name": item["venture_name"],
+                    "venture_priority": item["venture_priority"] or 3,
+                    "task_id": item["task_id"],
+                    "task_title": item["task_title"],
+                    "task_priority": item["task_priority"],
+                    "task_status": item["task_status"],
+                    "due_date": item["due_date"],
+                }
+        return list(actions.values())
+
     def list_projects(self, status: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT projects.*, ventures.name AS venture_name FROM projects LEFT JOIN ventures ON ventures.id = projects.venture_id"
         values: tuple[Any, ...] = ()
