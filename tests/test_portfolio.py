@@ -56,3 +56,29 @@ def test_venture_status_can_be_changed(tmp_path):
     venture = store.add_venture("ABSE.INC")
     store.set_venture_status(venture, "paused")
     assert store.list_ventures()[0]["status"] == "paused"
+
+
+def test_existing_database_gets_venture_column_without_losing_projects(tmp_path):
+    import sqlite3
+
+    database = tmp_path / "legacy.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO projects (name, description) VALUES ('Legacy project', 'keep me')"
+        )
+    store = SageStore(database)
+    legacy = store.list_projects()[0]
+    assert legacy["name"] == "Legacy project"
+    assert legacy["venture_id"] is None
+    venture = store.add_venture("Migrated portfolio")
+    store.assign_project_to_venture(legacy["id"], venture)
+    assert store.portfolio_summary()["ventures"][0]["projects"] == 1
