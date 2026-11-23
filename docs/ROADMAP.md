@@ -34,9 +34,9 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 ## v0.4 — Optional AI assistance
 
-- [ ] Provider-neutral model adapter
-- [ ] Context preview before external transmission
-- [ ] AI-generated plans clearly labeled as suggestions
+- [x] Provider-neutral OpenAI-compatible chat-completion adapter (CI-verified)
+- [x] Bounded context preview and explicit opt-in before external transmission (CI-verified)
+- [x] AI-generated suggestions labeled advisory-only; no automatic database mutations (CI-verified)
 - [ ] Human approval for consequential actions
 
 ## Release discipline
