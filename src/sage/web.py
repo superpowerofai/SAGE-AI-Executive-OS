@@ -12,6 +12,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     projects = store.list_projects()
     ventures = store.portfolio_summary()["ventures"]
     resource_entries = store.list_resource_entries(limit=12)
+    project_actions = store.project_next_actions()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -42,6 +43,13 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='12'>No ventures registered yet.</td></tr>"
+    project_action_rows = "".join(
+        f"<li><strong>{e(a['venture_name'] or 'Unassigned')} · {e(a['project_name'])}</strong>: "
+        f"{e(a['task_title']) if a['task_id'] is not None else 'No open task — add the first action'}"
+        f"{' · P' + str(a['task_priority']) if a['task_priority'] is not None else ''}"
+        f"{' · due ' + e(a['due_date']) if a['due_date'] else ''}</li>"
+        for a in project_actions
+    ) or "<li>No active projects.</li>"
     resource_rows = "".join(
         f"<li>{e(r['entry_date'])} · {e(r['venture_name'])} · "
         f"{'₹' + format(r['quantity'], ',.2f') if r['entry_type'] in {'expense', 'income'} else str(r['quantity']) + ' hours'}"
@@ -101,6 +109,7 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>ONE ACTION PER ACTIVE PROJECT</h2><ul>{project_action_rows}</ul></section>
 <section><h2>VENTURE PORTFOLIO</h2><p>Resource caps are optional planning inputs you enter; SAGE does not infer budgets or available hours.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Income this month (₹)</th><th>Expenses this month (₹)</th><th>Net this month (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th><th>Allocation signal</th></tr>{venture_rows}</table></div>
 <form method='post' action='/add-venture'><input name='name' placeholder='New venture name' required><input name='description' placeholder='Description'><input name='monthly_budget_cap' type='number' min='0' step='0.01' placeholder='Monthly budget cap ₹'><input name='weekly_hours_cap' type='number' min='0' step='0.5' placeholder='Weekly hours cap'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><button>Add venture</button></form>
