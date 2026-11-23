@@ -170,6 +170,27 @@ CREATE TABLE IF NOT EXISTS action_requests (
     error TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS action_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_request_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('created', 'approved', 'executed', 'rejected', 'expired', 'failed')),
+    details TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (action_request_id) REFERENCES action_requests(id) ON DELETE CASCADE
+);
+
+CREATE TRIGGER IF NOT EXISTS action_events_no_update
+BEFORE UPDATE ON action_events
+BEGIN
+    SELECT RAISE(ABORT, 'Action audit events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS action_events_no_delete
+BEFORE DELETE ON action_events
+BEGIN
+    SELECT RAISE(ABORT, 'Action audit events are append-only');
+END;
+
 CREATE TABLE IF NOT EXISTS recurring_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -1054,7 +1075,12 @@ class SageStore:
                 "INSERT INTO action_requests (action_type, summary, payload_json, payload_sha256, expires_at) VALUES (?, ?, ?, ?, ?)",
                 (action_type, summary, payload_json, payload_hash, expires),
             )
-            return int(cursor.lastrowid)
+            request_id = int(cursor.lastrowid)
+            connection.execute(
+                "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'created', ?)",
+                (request_id, f"Queued {action_type}: {summary}"),
+            )
+            return request_id
 
     def list_action_requests(self, status: str | None = None) -> list[dict[str, Any]]:
         allowed = {"pending", "executing", "executed", "rejected", "failed"}
@@ -1071,6 +1097,21 @@ class SageStore:
         for row in rows:
             row["payload"] = json.loads(row.pop("payload_json"))
         return rows
+
+    def list_action_events(
+        self, request_id: int | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        if limit < 1 or limit > 1000:
+            raise ValueError("Audit history limit must be between 1 and 1000.")
+        query = "SELECT * FROM action_events"
+        params: tuple[Any, ...] = ()
+        if request_id is not None:
+            query += " WHERE action_request_id = ?"
+            params = (request_id,)
+        query += " ORDER BY id DESC LIMIT ?"
+        params += (limit,)
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute(query, params)]
 
     def approve_action_request(self, request_id: int) -> Path:
         """Approve and execute one registered local action exactly once."""
@@ -1091,9 +1132,14 @@ class SageStore:
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) >= expires_at.astimezone(timezone.utc):
+                    expired_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
                     connection.execute(
                         "UPDATE action_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ? AND status = 'pending'",
-                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), "Approval window expired; create a new request.", request_id),
+                        (expired_at, "Approval window expired; create a new request.", request_id),
+                    )
+                    connection.execute(
+                        "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'expired', ?)",
+                        (request_id, "Approval window expired; execution blocked."),
                     )
                     connection.commit()
                     raise ValueError("Action approval expired; create a new request.")
@@ -1109,6 +1155,10 @@ class SageStore:
             )
             if claimed.rowcount != 1:
                 raise ValueError("This action request has already been claimed; it will not be executed twice.")
+            connection.execute(
+                "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'approved', ?)",
+                (request_id, "Human approval accepted; local calendar export started."),
+            )
         export_dir = Path(self.database).expanduser().resolve().parent / "exports"
         target = export_dir / filename
         try:
@@ -1119,11 +1169,19 @@ class SageStore:
                     "UPDATE action_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ? AND status = 'executing'",
                     (datetime.now().isoformat(timespec="seconds"), str(error)[:1000], request_id),
                 )
+                connection.execute(
+                    "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'failed', ?)",
+                    (request_id, str(error)[:1000]),
+                )
             raise
         with self._connect() as connection:
             connection.execute(
                 "UPDATE action_requests SET status = 'executed', completed_at = ?, result = ? WHERE id = ? AND status = 'executing'",
                 (datetime.now().isoformat(timespec="seconds"), str(result), request_id),
+            )
+            connection.execute(
+                "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'executed', ?)",
+                (request_id, str(result)),
             )
         return result
 
@@ -1138,6 +1196,10 @@ class SageStore:
                 if exists is None:
                     raise ValueError(f"Action request {request_id} does not exist.")
                 raise ValueError("Only pending action requests can be rejected.")
+            connection.execute(
+                "INSERT INTO action_events (action_request_id, event_type, details) VALUES (?, 'rejected', ?)",
+                (request_id, "Human rejected the action; nothing was executed."),
+            )
 
     def create_task_proposal(
         self, project_id: int, title: str, rationale: str = "",
@@ -1748,17 +1810,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
+        if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests", "action_events",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4, 5, 6, 7, 8, 9} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests"}:
+            if table not in data and version in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests", "action_events"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1924,11 +1986,11 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions", "context_notes", "action_requests", "action_events")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 11,
+                "version": 12,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(

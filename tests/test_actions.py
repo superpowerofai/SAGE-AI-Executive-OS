@@ -76,10 +76,12 @@ def test_action_requests_round_trip_through_json_backup(tmp_path):
     target = SageStore(tmp_path / "restored.db")
     imported = target.import_data(export_path)
     assert imported["action_requests"] == 1
+    assert imported["action_events"] == 1
     restored = target.list_action_requests()[0]
     assert restored["id"] == request_id
     assert restored["status"] == "pending"
     assert restored["payload"] == {"filename": "backup.ics"}
+    assert target.list_action_events(request_id)[0]["event_type"] == "created"
 
 
 def test_legacy_v9_json_without_action_queue_remains_importable(tmp_path):
@@ -91,6 +93,7 @@ def test_legacy_v9_json_without_action_queue_remains_importable(tmp_path):
     payload = json.loads(export_path.read_text(encoding="utf-8"))
     payload["version"] = 9
     payload["data"].pop("action_requests", None)
+    payload["data"].pop("action_events", None)
     legacy_path = tmp_path / "legacy-v9.json"
     legacy_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -164,3 +167,54 @@ def test_legacy_action_queue_migrates_payload_integrity_columns(tmp_path):
     expected_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     assert record["payload_sha256"] == expected_hash
     assert record["expires_at"] is None
+
+
+def test_action_lifecycle_is_recorded_in_audit_history(tmp_path):
+    store = SageStore(tmp_path / "sage.db")
+    request_id = store.create_action_request(
+        "calendar_export", "Audit export", {"filename": "audit.ics"}
+    )
+    store.approve_action_request(request_id)
+    events = store.list_action_events(request_id)
+    assert [event["event_type"] for event in reversed(events)] == [
+        "created", "approved", "executed"
+    ]
+    assert all(event["action_request_id"] == request_id for event in events)
+
+
+def test_rejected_action_is_recorded_in_audit_history(tmp_path):
+    store = SageStore(tmp_path / "sage.db")
+    request_id = store.create_action_request(
+        "calendar_export", "Reject export", {"filename": "reject-audit.ics"}
+    )
+    store.reject_action_request(request_id)
+    assert [event["event_type"] for event in reversed(store.list_action_events(request_id))] == [
+        "created", "rejected"
+    ]
+
+
+def test_action_audit_history_limit_is_bounded(tmp_path):
+    store = SageStore(tmp_path / "sage.db")
+    with pytest.raises(ValueError, match="between 1 and 1000"):
+        store.list_action_events(limit=0)
+    with pytest.raises(ValueError, match="between 1 and 1000"):
+        store.list_action_events(limit=1001)
+
+
+def test_action_audit_events_are_append_only(tmp_path):
+    import sqlite3
+
+    store = SageStore(tmp_path / "sage.db")
+    request_id = store.create_action_request(
+        "calendar_export", "Immutable audit", {"filename": "immutable.ics"}
+    )
+    event_id = store.list_action_events(request_id)[0]["id"]
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        with store._connect() as connection:
+            connection.execute(
+                "UPDATE action_events SET details = 'rewritten' WHERE id = ?", (event_id,)
+            )
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        with store._connect() as connection:
+            connection.execute("DELETE FROM action_events WHERE id = ?", (event_id,))
+    assert store.list_action_events(request_id)[0]["details"].startswith("Queued")

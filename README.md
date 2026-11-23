@@ -36,7 +36,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Preview the exact bounded business context prepared for AI; external transmission requires explicit `--send-context` approval in the CLI or an approval checkbox in the local cockpit.
 - Generate an offline, evidence-only daily executive briefing with one master next action, one action per active project, overdue work, blockers, pending approvals, recorded financial risks, and explicit data gaps. The same briefing appears in the local cockpit.
 - Optionally add an AI interpretation to the daily briefing using an OpenAI-compatible endpoint; context transmission still requires explicit approval. SAGE never lets the model mutate records.
-- Queue allow-listed local actions for explicit approval. The first action adapter exports dated open tasks to an `.ics` file under `exports/`; it validates filenames, never overwrites an existing file, records execution outcomes, binds approval to a SHA-256 payload digest, expires new requests after 24 hours, never overwrites an existing file, and blocks replay. External email/calendar API calls and payments are not enabled.
+- Queue allow-listed local actions for explicit approval. The first action adapter exports dated open tasks to an `.ics` file under `exports/`; it validates filenames, never overwrites an existing file, records execution outcomes, binds approval to a SHA-256 payload digest, expires new requests after 24 hours, never overwrites an existing file, and blocks replay. A SQLite-enforced append-only lifecycle history records creation, approval, execution, rejection, expiry and failure (sage action-history). External email/calendar API calls and payments are not enabled.
 - Import `.ics` calendar events into a selected project as pending task proposals. SAGE skips recurring, cancelled and undated events, deduplicates repeated imports, and never creates tasks until each proposal is approved.
 
 ## Requirements
@@ -163,6 +163,7 @@ sage context-preview
 sage briefing --ai --send-context
 sage request-calendar-export --filename week.ics
 sage actions
+sage action-history --limit 50
 sage approve-action 1
 sage reject-action 2
 sage import-ics calendar.ics --project-id 1

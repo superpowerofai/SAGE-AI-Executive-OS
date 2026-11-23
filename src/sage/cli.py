@@ -89,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     action_request = commands.add_parser("request-calendar-export", help="Queue a calendar export for explicit approval")
     action_request.add_argument("--filename", default="sage-calendar.ics")
     commands.add_parser("actions", help="List approval-gated action requests")
+    action_history = commands.add_parser("action-history", help="Show the action approval and execution audit trail")
+    action_history.add_argument("--request-id", type=int)
+    action_history.add_argument("--limit", type=int, default=50)
     approve_action = commands.add_parser("approve-action", help="Approve and execute one queued local action")
     approve_action.add_argument("request_id", type=int)
     reject_action = commands.add_parser("reject-action", help="Reject a queued action request")
@@ -602,6 +605,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"SAGE ACTION APPROVAL QUEUE ({len(requests)})")
             for request in requests:
                 print(f"#{request['id']} [{request['status']}] {request['action_type']} | {request['summary']} | {request.get('result') or request.get('error') or 'awaiting decision'}")
+        elif args.command == "action-history":
+            events = store.list_action_events(args.request_id, args.limit)
+            print(f"SAGE ACTION AUDIT HISTORY ({len(events)})")
+            for event in events:
+                print(
+                    f"#{event['id']} | request #{event['action_request_id']} | "
+                    f"{event['event_type']} | {event['created_at']} | {event['details']}"
+                )
         elif args.command == "approve-action":
             destination = store.approve_action_request(args.request_id)
             print(f"Approved and executed action #{args.request_id}. Calendar file created: {destination}")
