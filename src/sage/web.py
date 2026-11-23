@@ -112,9 +112,6 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
 <section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
 <form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
-<section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
-<section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
-<form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
 <section><h2>DAILY EXECUTIVE REVIEW</h2><p>Latest: {e(latest.get('review_date','Not recorded'))} · Priority: {e(latest.get('priority','—') or '—')}</p>
 <p>Wins: {e(latest.get('wins','—') or '—')} · Tomorrow: {e(latest.get('tomorrow','—') or '—')}</p>
 <form method='post' action='/review'><input name='priority' placeholder="Today's priority"><input name='wins' placeholder='Wins'><input name='blockers' placeholder='Blockers'><input name='tomorrow' placeholder="Tomorrow's first move"><button>Save review</button></form></section>
