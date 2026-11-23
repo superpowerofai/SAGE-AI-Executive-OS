@@ -88,3 +88,11 @@ def test_cli_venture_and_resource_tracking(tmp_path, capsys):
 
     assert main(["--db", database, "resources", "--venture-id", "1"]) == 0
     assert "Hosting" in capsys.readouterr().out
+
+
+def test_cli_restore_requires_explicit_confirmation(tmp_path):
+    import pytest
+
+    database = str(tmp_path / "active.db")
+    with pytest.raises(SystemExit):
+        main(["--db", database, "restore", str(tmp_path / "backup.db")])
