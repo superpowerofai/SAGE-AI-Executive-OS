@@ -13,6 +13,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     ventures = store.portfolio_summary()["ventures"]
     resource_entries = store.list_resource_entries(limit=12)
     project_actions = store.project_next_actions()
+    recurring_rules = store.list_recurring_tasks()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -43,6 +44,14 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<td>{v['week_hours_used']:g}</td><td>{e(v['allocation_signal'])}</td></tr>"
         for v in ventures
     ) or "<tr><td colspan='12'>No ventures registered yet.</td></tr>"
+    recurring_rows = "".join(
+        f"<tr><td>#{rule['id']}</td><td>{e(rule['project_name'])}</td><td>{e(rule['title'])}</td>"
+        f"<td>{e(rule['frequency'])} × {rule['frequency_interval']}</td><td>{e(rule['next_due_date'])}</td>"
+        f"<td>{e(rule['status'])}</td><td><form method='post' action='/recurring-status'>"
+        f"<input type='hidden' name='id' value='{rule['id']}'><select name='status'>"
+        f"<option>active</option><option>paused</option><option>completed</option></select>"
+        f"<button>Update</button></form></td></tr>" for rule in recurring_rules
+    ) or "<tr><td colspan='7'>No recurring task rules.</td></tr>"
     project_action_rows = "".join(
         f"<li><strong>{e(a['venture_name'] or 'Unassigned')} · {e(a['project_name'])}</strong>: "
         f"{e(a['task_title']) if a['task_id'] is not None else 'No open task — add the first action'}"
@@ -109,6 +118,10 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>RECURRING TASKS</h2><p>Rules generate dated task instances only when you press Generate due tasks. Generation is bounded to 100 instances per request.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Project</th><th>Task</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_rows}</table></div>
+<form method='post' action='/add-recurring'><select name='project_id' required><option value=''>Choose project</option>{''.join(f"<option value='{p['id']}'>{e(p['name'])}</option>" for p in projects if p['status'] == 'active')}</select><input name='title' placeholder='Recurring task' required><select name='frequency'><option>daily</option><option selected>weekly</option><option>monthly</option></select><input name='every' type='number' min='1' max='365' value='1' title='Repeat every N units'><select name='priority'><option value='1'>P1</option><option value='2'>P2</option><option value='3' selected>P3</option><option value='4'>P4</option><option value='5'>P5</option></select><input name='start_date' type='date'><button>Add recurring rule</button></form>
+<form method='post' action='/generate-recurring'><button>Generate due tasks</button></form></section>
 <section><h2>ONE ACTION PER ACTIVE PROJECT</h2><ul>{project_action_rows}</ul></section>
 <section><h2>VENTURE PORTFOLIO</h2><p>Resource caps are optional planning inputs you enter; SAGE does not infer budgets or available hours.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Priority</th><th>Active projects</th><th>Open tasks</th><th>Monthly cap (₹)</th><th>Income this month (₹)</th><th>Expenses this month (₹)</th><th>Net this month (₹)</th><th>Weekly cap (hours)</th><th>Logged this week</th><th>Allocation signal</th></tr>{venture_rows}</table></div>
@@ -188,7 +201,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -210,6 +223,19 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/add-recurring":
+                    store.add_recurring_task(
+                        int(data["project_id"]), data.get("title", ""),
+                        int(data.get("priority", "3")), data.get("frequency", "weekly"),
+                        int(data.get("every", "1")), data.get("start_date") or None,
+                    )
+                    notice = "Recurring task rule created."
+                elif path == "/recurring-status":
+                    store.set_recurring_task_status(int(data["id"]), data["status"])
+                    notice = "Recurring task status updated."
+                elif path == "/generate-recurring":
+                    generated = store.generate_recurring_tasks(limit=100)
+                    notice = f"Generated {len(generated)} recurring task(s)."
                 elif path == "/add-project":
                     venture_id = int(data["venture_id"]) if data.get("venture_id") else None
                     store.add_project(data.get("name", ""), data.get("description", ""), venture_id)
