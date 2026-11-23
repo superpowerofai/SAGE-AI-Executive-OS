@@ -85,6 +85,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS cash_positions (
+    venture_id INTEGER PRIMARY KEY,
+    opening_balance REAL NOT NULL,
+    as_of_date TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venture_id) REFERENCES ventures(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS recurring_obligations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     venture_id INTEGER NOT NULL,
@@ -422,16 +431,15 @@ class SageStore:
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
                            AND status = 'open' THEN amount ELSE 0 END), 0) AS payables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
-                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_receivables,
+                           AND status = 'open' AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_receivables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
-                           AND status = 'open' AND due_date BETWEEN ? AND ? THEN amount ELSE 0 END), 0) AS due_payables,
+                           AND status = 'open' AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_payables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
                            AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_receivables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
                            AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_payables
                        FROM financial_obligations WHERE venture_id = ?""",
-                    (as_of.isoformat(), forecast_end, as_of.isoformat(), forecast_end,
-                     as_of.isoformat(), as_of.isoformat(), venture["id"]),
+                    (forecast_end, forecast_end, as_of.isoformat(), as_of.isoformat(), venture["id"]),
                 ).fetchone()
                 open_receivables = float(obligations["receivables"])
                 open_payables = float(obligations["payables"])
@@ -439,6 +447,31 @@ class SageStore:
                 due_payables_30d = float(obligations["due_payables"])
                 overdue_receivables = float(obligations["overdue_receivables"])
                 overdue_payables = float(obligations["overdue_payables"])
+                cash_position = connection.execute(
+                    "SELECT * FROM cash_positions WHERE venture_id = ?", (venture["id"],)
+                ).fetchone()
+                cash_balance = None
+                cash_position_date = None
+                cash_opening_balance = None
+                if cash_position is not None:
+                    cash_position_date = cash_position["as_of_date"]
+                    cash_opening_balance = float(cash_position["opening_balance"])
+                    actual_income_since = connection.execute(
+                        """SELECT COALESCE(SUM(amount), 0) FROM income_entries
+                           WHERE venture_id = ? AND entry_date > ? AND entry_date <= ?""",
+                        (venture["id"], cash_position_date, as_of.isoformat()),
+                    ).fetchone()[0]
+                    actual_expenses_since = connection.execute(
+                        """SELECT COALESCE(SUM(quantity), 0) FROM resource_entries
+                           WHERE venture_id = ? AND entry_type = 'expense'
+                             AND entry_date > ? AND entry_date <= ?""",
+                        (venture["id"], cash_position_date, as_of.isoformat()),
+                    ).fetchone()[0]
+                    cash_balance = cash_opening_balance + float(actual_income_since) - float(actual_expenses_since)
+                forecast_cash_balance = (
+                    cash_balance + due_receivables_30d - due_payables_30d
+                    if cash_balance is not None else None
+                )
                 budget_cap = venture["monthly_budget_cap"]
                 hours_cap = venture["weekly_hours_cap"]
                 active_projects = int(row["active_projects"] or 0)
@@ -456,6 +489,8 @@ class SageStore:
                     hours_remaining is not None and hours_remaining < 0
                 ):
                     signal = "Recorded cap exceeded: review commitments before adding resources."
+                elif forecast_cash_balance is not None and forecast_cash_balance < 0:
+                    signal = "Recorded 30-day cash forecast is negative; verify liquidity before new commitments."
                 elif overdue_payables > 0:
                     signal = "Open payables are overdue; review settlement before adding new commitments."
                 elif due_payables_30d > due_receivables_30d:
@@ -484,6 +519,10 @@ class SageStore:
                     "overdue_receivables": overdue_receivables,
                     "overdue_payables": overdue_payables,
                     "expected_obligation_cashflow_30d": due_receivables_30d - due_payables_30d,
+                    "cash_position_date": cash_position_date,
+                    "cash_opening_balance": cash_opening_balance,
+                    "estimated_cash_balance": cash_balance,
+                    "forecast_cash_balance_30d": forecast_cash_balance,
                     "month_budget_remaining": budget_remaining,
                     "week_hours_used": week_hours,
                     "week_hours_remaining": hours_remaining,
@@ -701,6 +740,45 @@ class SageStore:
                 if remaining == 0:
                     break
         return created
+
+
+    def set_cash_position(
+        self, venture_id: int, opening_balance: float,
+        as_of_date: str, note: str = "",
+    ) -> None:
+        value = self._optional_nonnegative_number(opening_balance, "Opening cash balance")
+        if value is None:
+            raise ValueError("Opening cash balance must be a finite number.")
+        try:
+            date.fromisoformat(as_of_date)
+        except ValueError as error:
+            raise ValueError("Cash position date must use YYYY-MM-DD format.") from error
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM ventures WHERE id = ?", (venture_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Venture {venture_id} does not exist.")
+            connection.execute(
+                """INSERT INTO cash_positions (venture_id, opening_balance, as_of_date, note)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(venture_id) DO UPDATE SET
+                     opening_balance = excluded.opening_balance,
+                     as_of_date = excluded.as_of_date,
+                     note = excluded.note,
+                     updated_at = CURRENT_TIMESTAMP""",
+                (venture_id, value, as_of_date, note.strip()),
+            )
+
+    def list_cash_positions(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            return [
+                dict(row) for row in connection.execute(
+                    """SELECT cash_positions.*, ventures.name AS venture_name
+                       FROM cash_positions
+                       JOIN ventures ON ventures.id = cash_positions.venture_id
+                       ORDER BY ventures.strategic_priority, ventures.name"""
+                )
+            ]
 
     def add_obligation(
         self, venture_id: int, obligation_type: str, amount: float,
@@ -1411,17 +1489,17 @@ class SageStore:
         if not isinstance(payload, dict) or payload.get("format") != "sage-export":
             raise ValueError("File is not a recognized SAGE JSON export.")
         version = payload.get("version")
-        if version not in {1, 2, 3, 4, 5, 6, 7}:
+        if version not in {1, 2, 3, 4, 5, 6, 7, 8}:
             raise ValueError(f"Unsupported SAGE export version: {version}")
         data = payload.get("data")
         if not isinstance(data, dict):
             raise ValueError("SAGE export is missing its data object.")
         tables = (
             "ventures", "projects", "tasks", "daily_reviews",
-            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations",
+            "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions",
         )
         for table in tables:
-            if table not in data and version in {1, 2, 3, 4, 5, 6} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations"}:
+            if table not in data and version in {1, 2, 3, 4, 5, 6, 7} and table in {"ventures", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations", "recurring_obligations", "cash_positions"}:
                 data[table] = []
             if not isinstance(data.get(table), list):
                 raise ValueError(f"SAGE export table '{table}' must be a list.")
@@ -1591,7 +1669,7 @@ class SageStore:
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
-                "version": 7,
+                "version": 8,
                 "exported_at": date.today().isoformat(),
                 "data": {
                     table: [dict(row) for row in connection.execute(
