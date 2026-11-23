@@ -158,6 +158,19 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
         "config": "test-local-model",
     }
 
+    no_consent_request = Request(
+        url + "/suggest",
+        data=b"goal=Do%20something",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        urlopen(no_consent_request, timeout=2)
+        assert False, "AI context must not be sent without explicit consent"
+    except HTTPError as error:
+        assert error.code == 400
+    assert received["goal"] == "Choose the next step"
+
 
 def test_web_server_refuses_non_local_binding(tmp_path):
     import pytest
