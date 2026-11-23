@@ -266,7 +266,7 @@ class SageStore:
         if status is not None:
             if status not in {"active", "paused", "completed"}:
                 raise ValueError("Invalid venture status.")
-            query += " WHERE projects.status = ?"
+            query += " WHERE status = ?"
             values = (status,)
         query += " ORDER BY strategic_priority, created_at, id"
         with self._connect() as connection:
@@ -443,15 +443,16 @@ class SageStore:
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
                            AND status = 'open' THEN amount ELSE 0 END), 0) AS payables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
-                           AND status = 'open' AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_receivables,
+                           AND status = 'open' AND due_date >= ? AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_receivables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
-                           AND status = 'open' AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_payables,
+                           AND status = 'open' AND due_date >= ? AND due_date <= ? THEN amount ELSE 0 END), 0) AS due_payables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'receivable'
                            AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_receivables,
                          COALESCE(SUM(CASE WHEN obligation_type = 'payable'
                            AND status = 'open' AND due_date < ? THEN amount ELSE 0 END), 0) AS overdue_payables
                        FROM financial_obligations WHERE venture_id = ?""",
-                    (forecast_end, forecast_end, as_of.isoformat(), as_of.isoformat(), venture["id"]),
+                    (as_of.isoformat(), forecast_end, as_of.isoformat(), forecast_end,
+                     as_of.isoformat(), as_of.isoformat(), venture["id"]),
                 ).fetchone()
                 open_receivables = float(obligations["receivables"])
                 open_payables = float(obligations["payables"])
@@ -468,7 +469,9 @@ class SageStore:
                 if cash_position is not None:
                     cash_position_date = cash_position["as_of_date"]
                     cash_opening_balance = float(cash_position["opening_balance"])
-                    actual_income_since = connection.execute(
+                    # A future-dated balance cannot establish cash as of this report date.
+                    if cash_position_date <= as_of.isoformat():
+                        actual_income_since = connection.execute(
                         """SELECT COALESCE(SUM(amount), 0) FROM income_entries
                            WHERE venture_id = ? AND entry_date > ? AND entry_date <= ?""",
                         (venture["id"], cash_position_date, as_of.isoformat()),
@@ -479,7 +482,7 @@ class SageStore:
                              AND entry_date > ? AND entry_date <= ?""",
                         (venture["id"], cash_position_date, as_of.isoformat()),
                     ).fetchone()[0]
-                    cash_balance = cash_opening_balance + float(actual_income_since) - float(actual_expenses_since)
+                        cash_balance = cash_opening_balance + float(actual_income_since) - float(actual_expenses_since)
                 forecast_cash_balance = (
                     cash_balance + due_receivables_30d - due_payables_30d
                     if cash_balance is not None else None
