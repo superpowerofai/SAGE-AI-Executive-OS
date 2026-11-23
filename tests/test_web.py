@@ -103,6 +103,17 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
     assert "Manual cash position saved." in cash_page
     assert store.list_cash_positions()[0]["opening_balance"] == 10000
 
+    note_request = Request(
+        url + "/add-note",
+        data=b"category=preferences&title=Operating%20rule&content=Evidence%20first&importance=1",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urlopen(note_request, timeout=2) as response:
+        note_page = response.read().decode()
+    assert "SAGE context note saved." in note_page
+    assert store.list_context_notes()[0]["title"] == "Operating rule"
+
     income_request = Request(
         url + "/log-resource",
         data=f"venture_id={venture_id}&entry_type=income&quantity=5000&note=Client%20payment".encode(),
