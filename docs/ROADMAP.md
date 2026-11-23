@@ -24,6 +24,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Receivables/payables tracking with settlement posting and 30-day obligation forecast (CI-verified)
 - [x] Recurring receivable/payable rules with bounded generation; no automatic payment/collection (CI-verified)
 - [x] Manually verified venture cash positions and 30-day cash forecast from recorded ledger/obligations (CI-verified)
+- [x] Rule-based venture allocation readiness with explicit blockers and missing evidence; no automatic cash allocation (CI-verified)
 - [ ] Multi-account bank balances/feeds, scenario-based cash-flow forecasting and ROI-aware allocation recommendations beyond current rule-based signals
 - [x] Integrity-checked SQLite backup, versioned JSON export/import and confirmed restore with pre-restore safety copy (CI-verified)
 - [x] Venture portfolio registry, project ownership, strategic priority and optional resource caps (CI-verified)
