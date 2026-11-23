@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("ventures", help="List ventures and resource capacity")
     for command_name, help_text, quantity_name in (
         ("log-expense", "Record an expense in INR", "amount"),
+        ("log-income", "Record income in INR", "amount"),
         ("log-time", "Record hours worked", "hours"),
     ):
         resource = commands.add_parser(command_name, help=help_text)
@@ -370,18 +371,27 @@ def main(argv: list[str] | None = None) -> int:
                     if venture["week_hours_remaining"] is not None else "weekly hours cap unknown"
                 )
                 print(
-                    f"  Usage — {venture['name']}: ₹{venture['month_spend']:,.2f} spent this month; "
+                    f"  Usage — {venture['name']}: ₹{venture['month_revenue']:,.2f} income, "
+                    f"₹{venture['month_spend']:,.2f} expenses, "
+                    f"₹{venture['month_net_cash_flow']:,.2f} net this month; "
                     f"{venture['week_hours_used']:g} hours logged this week; "
                     f"{budget_left}; {hours_left}"
                 )
                 print(f"  Allocation signal — {venture['allocation_signal']}")
-        elif args.command in {"log-expense", "log-time"}:
-            kind = "expense" if args.command == "log-expense" else "time"
-            quantity = args.amount if kind == "expense" else args.hours
-            entry_id = store.log_resource(
-                args.venture_id, kind, quantity, args.entry_date, args.project_id, args.note
-            )
-            unit = "₹" if kind == "expense" else "hours"
+        elif args.command in {"log-expense", "log-income", "log-time"}:
+            kind = {
+                "log-expense": "expense", "log-income": "income", "log-time": "time"
+            }[args.command]
+            quantity = args.hours if kind == "time" else args.amount
+            if kind == "income":
+                entry_id = store.log_income(
+                    args.venture_id, quantity, args.entry_date, args.project_id, args.note
+                )
+            else:
+                entry_id = store.log_resource(
+                    args.venture_id, kind, quantity, args.entry_date, args.project_id, args.note
+                )
+            unit = "hours" if kind == "time" else "INR"
             print(f"Recorded {kind} #{entry_id}: {quantity} {unit} for venture #{args.venture_id}")
         elif args.command == "resources":
             entries = store.list_resource_entries(args.venture_id, args.limit)
