@@ -479,6 +479,11 @@ def main(argv: list[str] | None = None) -> int:
                     f"estimated cash {'unknown' if venture['estimated_cash_balance'] is None else 'INR ' + format(venture['estimated_cash_balance'], ',.2f')}; "
                     f"30-day cash forecast {'unknown' if venture['forecast_cash_balance_30d'] is None else 'INR ' + format(venture['forecast_cash_balance_30d'], ',.2f')}"
                 )
+                print(f"  Allocation readiness — {venture['allocation_readiness']}")
+                if venture["allocation_blockers"]:
+                    print("  Allocation blockers — " + "; ".join(venture["allocation_blockers"]))
+                if venture["allocation_data_gaps"]:
+                    print("  Missing allocation inputs — " + "; ".join(venture["allocation_data_gaps"]))
                 print(f"  Allocation signal — {venture['allocation_signal']}")
         elif args.command in {"log-expense", "log-income", "log-time"}:
             kind = {
