@@ -99,6 +99,8 @@ sage ventures
 sage log-expense 1 1250 --note "Hosting"
 sage log-income 1 9500 --note "Client payment"
 sage add-obligation 1 receivable 25000 2026-12-01 "Client invoice"
+sage add-recurring-obligation 1 payable 9000 "Office rent" --frequency monthly --start-date 2026-12-01
+sage generate-recurring-obligations
 sage obligations --status open
 sage settle-obligation 1
 sage log-time 1 2.5 --note "Build automation"
