@@ -11,13 +11,13 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] Core unit tests
 - [x] CLI workflow tests
 - [x] `python -m sage` entry point
-- [x] GitHub Actions matrix for Python 3.10, 3.11 and 3.12
+- [x] GitHub Actions matrix for Python 3.10, 3.11, 3.12 and 3.13
 - [x] Confirm a successful clean CI run across the matrix (run 45061884697)
 
 ## v0.2 — Usability
 
-- [x] CLI focus view for active/paused projects and one prioritized next action (CI-verified on Python 3.10, 3.11 and 3.12)
-- [x] Local interactive web cockpit for projects, tasks, reviews and blockers (CI-verified on Python 3.10, 3.11 and 3.12)
+- [x] CLI focus view for active/paused projects and one prioritized next action (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
+- [x] Local interactive web cockpit for projects, tasks, reviews and blockers (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 - [x] 7-day and 30-day execution plan with overdue, upcoming and unscheduled work
 - [x] Edit project/task details and archive by completing projects or tasks (CI-verified)
 - [x] Income and expense logging with monthly net cash-flow snapshots (CI-verified)
@@ -28,10 +28,10 @@ This roadmap distinguishes implemented code from behavior that has actually been
 
 ## v0.3 — Executive review
 
-- [x] Daily review record and recent review history (CI-verified on Python 3.10, 3.11 and 3.12)
-- [x] 7-day and 30-day review summaries (CI-verified on Python 3.10, 3.11 and 3.12)
-- [x] Structured blocker tracking with project/task links and resolution state (CI-verified on Python 3.10, 3.11 and 3.12)
-- [x] Decision journal with context, choice, rationale and revisit date (CI-verified on Python 3.10, 3.11 and 3.12)
+- [x] Daily review record and recent review history (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
+- [x] 7-day and 30-day review summaries (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
+- [x] Structured blocker tracking with project/task links and resolution state (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
+- [x] Decision journal with context, choice, rationale and revisit date (CI-verified on Python 3.10, 3.11, 3.12 and 3.13)
 
 ## v0.4 — Optional AI assistance
 
