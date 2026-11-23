@@ -86,3 +86,11 @@ def test_due_date_must_be_iso_format(tmp_path):
         assert "YYYY-MM-DD" in str(error)
     else:
         raise AssertionError("Invalid due date should be rejected")
+
+
+def test_store_creates_missing_database_parent_directories(tmp_path):
+    database = tmp_path / "nested" / "runtime" / "sage.db"
+    store = SageStore(database)
+    project_id = store.add_project("Nested database")
+    assert database.exists()
+    assert store.list_projects()[0]["id"] == project_id
