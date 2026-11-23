@@ -46,3 +46,13 @@ def test_cash_position_validation_and_upsert(tmp_path):
     assert positions[0]["note"] == "Updated"
     store.set_cash_position(venture, -250, "2026-11-24", "Overdraft")
     assert store.list_cash_positions()[0]["opening_balance"] == -250
+
+
+def test_future_dated_cash_position_is_not_used_for_an_earlier_report(tmp_path):
+    store = SageStore(tmp_path / "future-cash.db")
+    venture = store.add_venture("Future cash")
+    store.set_cash_position(venture, 50000, "2026-11-25", "Future balance")
+    summary = store.portfolio_summary(today=date(2026, 11, 23))["ventures"][0]
+    assert summary["cash_position_date"] == "2026-11-25"
+    assert summary["estimated_cash_balance"] is None
+    assert summary["forecast_cash_balance_30d"] is None
