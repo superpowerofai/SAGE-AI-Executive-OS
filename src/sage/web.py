@@ -27,6 +27,8 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     active = [p for p in projects if p["status"] == "active"]
     active_ids = {p["id"] for p in active}
     next_task = next((t for t in tasks if t["project_id"] in active_ids and t["status"] != "done"), None)
+    from .ai import build_daily_briefing, format_daily_briefing
+    briefing_html = f"<section><h2>DAILY EXECUTIVE BRIEFING</h2><pre class='suggestion'>{escape(format_daily_briefing(build_daily_briefing(store)))}</pre></section>"
 
     def e(value: object) -> str:
         return escape(str(value if value is not None else ""), quote=True)
@@ -163,6 +165,7 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+{briefing_html}
 <section><h2>SAGE CONTEXT NOTES</h2><p>Store durable operating preferences, constraints and business context for the local AI advisor. Do not store passwords, bank account numbers or other secrets.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Category</th><th>Title</th><th>Importance</th><th>Content</th><th>Action</th></tr>{context_note_rows}</table></div>
 <form method='post' action='/add-note'><input name='category' placeholder='Category (e.g. preferences, strategy)' value='general'><input name='title' placeholder='Short note title' required><textarea name='content' placeholder='Durable context for SAGE' required></textarea><select name='importance'><option value='1'>P1 · Critical</option><option value='2'>P2 · High</option><option value='3' selected>P3 · Normal</option><option value='4'>P4 · Low</option><option value='5'>P5 · Reference</option></select><button>Save context note</button></form></section>

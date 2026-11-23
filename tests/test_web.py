@@ -32,6 +32,8 @@ def test_local_web_cockpit_renders_and_accepts_project(tmp_path, monkeypatch):
         raise AssertionError("Local SAGE server did not start")
 
     assert "SAGE" in page and "EXECUTIVE COCKPIT" in page
+    assert "DAILY EXECUTIVE BRIEFING" in page
+    assert "UNKNOWN / MISSING INPUTS" in page
     assert page.count("7-DAY EXECUTION PLAN") == 1
     assert page.count("DECISION JOURNAL") == 1
     request = Request(

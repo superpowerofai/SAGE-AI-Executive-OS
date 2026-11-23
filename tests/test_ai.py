@@ -72,3 +72,35 @@ def test_context_preview_and_ai_suggestion_use_read_only_snapshot(tmp_path):
     assert "What should I do next?" in captured["messages"][1]["content"]
     assert "Lead automation" in captured["messages"][1]["content"]
     assert store.list_projects()[0]["name"] == "Lead automation"
+
+
+def test_daily_briefing_uses_recorded_data_and_reports_unknowns(tmp_path):
+    from sage.ai import build_daily_briefing, format_daily_briefing
+
+    store = SageStore(tmp_path / "briefing.db")
+    venture = store.add_venture("Test venture")
+    project = store.add_project("First project", venture_id=venture)
+    task_id = store.add_task(project, "Call first prospect", priority=1)
+    store.add_blocker("Waiting for customer list", project_id=project)
+    briefing = build_daily_briefing(store)
+
+    assert briefing["master_next_action"]["task_id"] == task_id
+    assert briefing["master_next_action"]["title"] == "Call first prospect"
+    assert briefing["open_blockers"][0]["title"] == "Waiting for customer list"
+    assert any("cash is unknown" in gap for gap in briefing["data_gaps"])
+    rendered = format_daily_briefing(briefing)
+    assert "MASTER NEXT ACTION" in rendered
+    assert "RECORDED FINANCIAL RISKS" in rendered
+    assert "No tasks, finances, or external systems were changed." in rendered
+    assert store.list_tasks()[0]["status"] == "todo"
+
+
+def test_daily_briefing_empty_database_does_not_invent_work(tmp_path):
+    from sage.ai import build_daily_briefing
+
+    store = SageStore(tmp_path / "empty-briefing.db")
+    briefing = build_daily_briefing(store)
+    assert briefing["master_next_action"] is None
+    assert briefing["active_project_actions"] == []
+    assert briefing["financial_risks"] == []
+    assert any("No active projects" in gap for gap in briefing["data_gaps"])

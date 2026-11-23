@@ -88,6 +88,106 @@ class OpenAICompatibleClient:
         return content.strip()
 
 
+
+def build_daily_briefing(store: SageStore) -> dict:
+    """Build an offline, evidence-only executive briefing from recorded SAGE data."""
+    from datetime import date
+
+    today = date.today()
+    plan = store.execution_plan(7, today)
+    projects = [p for p in store.list_projects() if p["status"] == "active"]
+    actions = store.project_next_actions()
+    blockers = store.list_blockers("open")
+    proposals = store.list_task_proposals("pending")
+    reviews = store.list_reviews(1)
+    portfolio = store.portfolio_summary(today)["ventures"]
+
+    # Prefer an in-progress task, then the highest-priority task due soon/overdue.
+    candidates = [t for t in store.list_tasks() if t["status"] != "done"
+                  and any(p["id"] == t["project_id"] for p in projects)]
+    candidates.sort(key=lambda t: (0 if t["status"] == "in_progress" else 1,
+                                   t["priority"], t["due_date"] or "9999-12-31", t["id"]))
+    master = candidates[0] if candidates else None
+
+    risks = []
+    for venture in portfolio:
+        if venture.get("overdue_payables", 0) > 0:
+            risks.append({"venture": venture["name"], "type": "overdue_payables",
+                          "amount_inr": venture["overdue_payables"]})
+        forecast = venture.get("forecast_cash_balance_30d")
+        if forecast is not None and forecast < 0:
+            risks.append({"venture": venture["name"], "type": "negative_30_day_cash_forecast",
+                          "amount_inr": forecast})
+
+    data_gaps = []
+    if not projects:
+        data_gaps.append("No active projects are recorded.")
+    if not reviews:
+        data_gaps.append("No daily executive review is recorded yet.")
+    if any(v.get("estimated_cash_balance") is None for v in portfolio):
+        data_gaps.append("Current cash is unknown for one or more ventures; no bank feed is connected.")
+    if not portfolio:
+        data_gaps.append("No ventures are registered; venture-level financial health cannot be assessed.")
+
+    return {
+        "as_of": today.isoformat(),
+        "master_next_action": ({"task_id": master["id"], "title": master["title"],
+                                "project": master.get("project_name"), "priority": master["priority"],
+                                "status": master["status"], "due_date": master.get("due_date")}
+                               if master else None),
+        "active_project_actions": actions,
+        "overdue_tasks": plan["overdue"],
+        "upcoming_7_day_tasks": plan["upcoming"],
+        "open_blockers": blockers,
+        "pending_task_approvals": proposals,
+        "latest_review": reviews[0] if reviews else None,
+        "financial_risks": risks,
+        "data_gaps": data_gaps,
+        "guardrails": ["Facts above come from recorded SAGE data only.",
+                       "Unknown values are not estimates.",
+                       "No tasks, finances, or external systems were changed."],
+    }
+
+
+def format_daily_briefing(briefing: dict) -> str:
+    """Render the deterministic briefing in a readable terminal format."""
+    lines = [f"SAGE DAILY EXECUTIVE BRIEFING | {briefing['as_of']}", "", "MASTER NEXT ACTION"]
+    master = briefing["master_next_action"]
+    if master:
+        due = f" | due {master['due_date']}" if master.get("due_date") else ""
+        lines.append(f"{master['title']} — {master['project']} (P{master['priority']}, {master['status']}){due}")
+    else:
+        lines.append("No open task exists in an active project. Choose or create the first concrete action.")
+    for key, label in (("overdue_tasks", "OVERDUE TASKS"),
+                       ("upcoming_7_day_tasks", "UPCOMING — NEXT 7 DAYS"),
+                       ("active_project_actions", "ONE ACTION PER ACTIVE PROJECT"),
+                       ("open_blockers", "OPEN BLOCKERS"),
+                       ("pending_task_approvals", "PENDING HUMAN APPROVALS"),
+                       ("financial_risks", "RECORDED FINANCIAL RISKS"),
+                       ("data_gaps", "UNKNOWN / MISSING INPUTS")):
+        items = briefing[key]
+        lines.extend(["", f"{label} ({len(items)}):"])
+        if not items:
+            lines.append("None recorded.")
+        else:
+            for item in items:
+                if key == "data_gaps":
+                    lines.append(f"- {item}")
+                elif key == "financial_risks":
+                    lines.append(f"- {item['venture']}: {item['type']} (INR {item['amount_inr']:,.2f})")
+                elif key == "active_project_actions":
+                    title = item.get("task_title") or "No task recorded — define the first action"
+                    lines.append(f"- {item['project_name']}: {title}")
+                else:
+                    title = item.get("title") or item.get("task_title") or item.get("description") or str(item)
+                    lines.append(f"- {title}")
+    review = briefing.get("latest_review")
+    lines.extend(["", "LATEST REVIEW"])
+    lines.append(f"{review['review_date']}: priority={review['priority'] or 'not recorded'}; "
+                 f"tomorrow={review['tomorrow'] or 'not recorded'}" if review else "No daily review recorded.")
+    lines.extend(["", "GUARDRAILS", *[f"- {item}" for item in briefing["guardrails"]]])
+    return "\n".join(lines)
+
 def preview_context(store: SageStore) -> str:
     """Return the exact business context payload intended for AI transmission."""
     return json.dumps(store.ai_context(), ensure_ascii=False, indent=2)
@@ -105,13 +205,13 @@ def generate_suggestion(
         {
             "role": "system",
             "content": (
-                "You are SAGE, a careful executive operating assistant. "
-                "Use only the supplied records. Separate observed facts from assumptions. "
-                "Do not invent revenue, costs, deadlines, available cash or available hours. "
-                "Give one recommended master next action and, when useful, one action per active project; "
-                "avoid overwhelming the user with idea lists. Explain the evidence, list missing inputs, "
-                "and identify any risk. You may suggest actions but must never claim to execute "
-                "them or change records. Keep advice practical and concise."
+                "You are SAGE, a careful executive operating assistant. Use only the supplied records. "
+                "Clearly label RECORDED FACTS, REASONED INTERPRETATION, RECOMMENDATION, and UNKNOWN INPUTS. "
+                "Never invent revenue, costs, deadlines, cash, available hours, customer demand, or progress. "
+                "Prioritize overdue work, in-progress work, blockers, and recorded financial risks. "
+                "Give exactly one master next action, plus at most one action per active project. "
+                "Explain which supplied record supports each recommendation. If evidence is missing, say so. "
+                "Never claim to execute actions or change records; all output is advisory only."
             ),
         },
         {

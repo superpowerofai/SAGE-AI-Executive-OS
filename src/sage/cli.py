@@ -231,6 +231,10 @@ def build_parser() -> argparse.ArgumentParser:
     restore.add_argument("--yes", action="store_true", help="Confirm replacing the active database")
 
     commands.add_parser("context-preview", help="Preview the exact SAGE context prepared for AI")
+    briefing = commands.add_parser("briefing", help="Build an evidence-only daily executive briefing")
+    briefing.add_argument("--ai", action="store_true", help="Ask the configured AI to interpret the briefing")
+    briefing.add_argument("--send-context", action="store_true", help="Approve sending the current SAGE context to the AI provider")
+    briefing.add_argument("--timeout", type=float, default=45.0)
     suggest = commands.add_parser("suggest", help="Ask an external AI for an advisory suggestion")
     suggest.add_argument("goal", help="What you want help deciding or planning")
     suggest.add_argument("--send-context", action="store_true",
@@ -736,6 +740,18 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "context-preview":
             from .ai import preview_context
             print(preview_context(store))
+        elif args.command == "briefing":
+            from .ai import build_daily_briefing, format_daily_briefing
+            briefing_data = build_daily_briefing(store)
+            print(format_daily_briefing(briefing_data))
+            if args.ai:
+                if not args.send_context:
+                    raise ValueError("AI context transmission requires --send-context. Review 'sage context-preview' first.")
+                from .ai import AIConfig, generate_suggestion
+                print("\nAI INTERPRETATION — ADVISORY ONLY")
+                print(generate_suggestion(store, "Prepare today's executive briefing. Use the supplied records; distinguish facts, interpretation, recommendation and unknowns. Respect the one-master-action rule.", AIConfig.from_env(timeout=args.timeout)))
+            elif args.send_context:
+                raise ValueError("--send-context is only valid together with --ai.")
         elif args.command == "suggest":
             if not args.send_context:
                 raise ValueError(

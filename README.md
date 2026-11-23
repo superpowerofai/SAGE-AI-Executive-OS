@@ -34,7 +34,8 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers, resource entries, income entries and recurring task rules) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
 - Store durable local context notes (preferences, constraints and operating rules) that are included in AI context previews.
 - Preview the exact bounded business context prepared for AI; external transmission requires explicit `--send-context` approval in the CLI or an approval checkbox in the local cockpit.
-- Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
+- Generate an offline, evidence-only daily executive briefing with one master next action, one action per active project, overdue work, blockers, pending approvals, recorded financial risks, and explicit data gaps. The same briefing appears in the local cockpit.
+- Optionally add an AI interpretation to the daily briefing using an OpenAI-compatible endpoint; context transmission still requires explicit approval. SAGE never lets the model mutate records.
 
 ## Requirements
 
@@ -155,11 +156,13 @@ For a remote provider, use its HTTPS base URL and set `SAGE_AI_API_KEY` in the e
 Preview the context first, then explicitly approve transmission:
 
 ```bash
+sage briefing
 sage context-preview
+sage briefing --ai --send-context
 sage suggest "What should receive my next focused work block?" --send-context
 ```
 
-The local cockpit includes an AI Advisor form with an explicit consent checkbox. AI responses are suggestions only. They are not automatically saved as decisions, tasks, or actions. The context preview includes venture records, project/task lists, open blockers, recent reviews/decisions, and recent resource entries; inspect it before sending.
+The local cockpit displays the evidence-only daily briefing automatically and includes an AI Advisor form with an explicit consent checkbox. CLI `sage briefing` works offline; `sage briefing --ai --send-context` adds a model interpretation only after you approve transmission. AI responses are suggestions only. They are not automatically saved as decisions, tasks, or actions. The context preview includes venture records, project/task lists, open blockers, recent reviews/decisions, and recent resource entries; inspect it before sending.
 
 ## GitHub Actions
 
