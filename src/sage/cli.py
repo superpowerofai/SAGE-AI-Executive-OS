@@ -377,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
             print("SAGE VENTURE PORTFOLIO")
             for venture in summary["ventures"]:
                 budget = (
-                    f"₹{venture['monthly_budget_cap']:,.2f}/month cap"
+                    f"INR {venture['monthly_budget_cap']:,.2f}/month cap"
                     if venture["monthly_budget_cap"] is not None else "budget cap not set"
                 )
                 hours = (
@@ -391,14 +391,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
             print(f"Unassigned projects: {summary['unassigned_projects']}")
             print(
-                f"Known caps entered: ₹{summary['known_monthly_budget_caps']:,.2f}/month "
+                f"Known caps entered: INR {summary['known_monthly_budget_caps']:,.2f}/month "
                 f"across {summary['budget_cap_entries']} ventures; "
                 f"{summary['known_weekly_hours_caps']:g} hours/week "
                 f"across {summary['hours_cap_entries']} ventures."
             )
             for venture in summary["ventures"]:
                 budget_left = (
-                    f"₹{venture['month_budget_remaining']:,.2f} remaining this month"
+                    f"INR {venture['month_budget_remaining']:,.2f} remaining this month"
                     if venture["month_budget_remaining"] is not None else "monthly spend cap unknown"
                 )
                 hours_left = (
@@ -406,9 +406,9 @@ def main(argv: list[str] | None = None) -> int:
                     if venture["week_hours_remaining"] is not None else "weekly hours cap unknown"
                 )
                 print(
-                    f"  Usage — {venture['name']}: ₹{venture['month_revenue']:,.2f} income, "
-                    f"₹{venture['month_spend']:,.2f} expenses, "
-                    f"₹{venture['month_net_cash_flow']:,.2f} net this month; "
+                    f"  Usage — {venture['name']}: INR {venture['month_revenue']:,.2f} income, "
+                    f"INR {venture['month_spend']:,.2f} expenses, "
+                    f"INR {venture['month_net_cash_flow']:,.2f} net this month; "
                     f"{venture['week_hours_used']:g} hours logged this week; "
                     f"{budget_left}; {hours_left}"
                 )
@@ -432,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             entries = store.list_resource_entries(args.venture_id, args.limit)
             print(f"SAGE RESOURCE LOG ({len(entries)})")
             for entry in entries:
-                quantity = f"₹{entry['quantity']:,.2f}" if entry["entry_type"] == "expense" else f"{entry['quantity']:g} hours"
+                quantity = f"INR {entry['quantity']:,.2f}" if entry["entry_type"] in {"expense", "income"} else f"{entry['quantity']:g} hours"
                 linked = f" / {entry['project_name']}" if entry["project_name"] else ""
                 print(
                     f"#{entry['id']} {entry['entry_date']} | {entry['venture_name']}{linked} "
