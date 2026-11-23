@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from .core import SageStore
 
 
-def _page(store: SageStore, notice: str = "") -> str:
+def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     projects = store.list_projects()
     ventures = store.portfolio_summary()["ventures"]
     resource_entries = store.list_resource_entries(limit=12)
@@ -77,6 +77,7 @@ def _page(store: SageStore, notice: str = "") -> str:
     focus = (f"{e(next_task['title'])} — {e(next_task['project_name'])}"
              if next_task else "No open next action in active projects.")
     notice_html = f"<p class='notice'>{e(notice)}</p>" if notice else ""
+    suggestion_html = f"<pre class='suggestion'>{e(suggestion)}</pre>" if suggestion else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SAGE Executive Cockpit</title><style>
@@ -89,7 +90,7 @@ p,.muted{{color:var(--muted)}}.grid{{display:grid;grid-template-columns:repeat(a
 input,select,textarea,button{{font:inherit;border-radius:8px;border:1px solid var(--line);padding:9px;background:#11151b;color:var(--text)}}
 input,textarea{{min-width:150px;flex:1}}textarea{{width:100%;min-height:65px}}button{{background:var(--gold);color:#171717;border:0;font-weight:650;cursor:pointer}}
 table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}}th{{color:var(--muted)}}
-.notice{{padding:10px;background:#293322;border-radius:8px}}a{{color:var(--gold)}}.scroll{{overflow-x:auto}}
+ .notice{{padding:10px;background:#293322;border-radius:8px}}.suggestion{{white-space:pre-wrap;overflow-wrap:anywhere;background:#11151b;padding:14px;border-radius:8px;border:1px solid var(--line)}}a{{color:var(--gold)}}.scroll{{overflow-x:auto}}
 </style></head><body><main>
 <h1>SAGE <span style='color:var(--gold)'>EXECUTIVE COCKPIT</span></h1>
 <p>Local-first command center · Your data stays in your local SQLite database.</p>{notice_html}
@@ -113,6 +114,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <section><h2>7-DAY EXECUTION PLAN</h2><ul>{plan_rows}</ul></section>
 <section><h2>DECISION JOURNAL</h2><ul>{decision_rows}</ul>
 <form method='post' action='/decision'><input name='title' placeholder='Decision title' required><input name='choice' placeholder='Chosen option' required><input name='rationale' placeholder='Reasoning'><button>Record decision</button></form></section>
+<section><h2>SAGE AI ADVISOR</h2><p>Optional. Review <code>sage context-preview</code> first. Submitting this form sends the current bounded business context and your goal to the configured AI endpoint. AI output is advisory only; no records are changed.</p>
+<form method='post' action='/suggest'><input name='goal' placeholder='What decision or next step should SAGE help with?' required>
+<label><input type='checkbox' name='send_context' value='on' required> I approve sending the current SAGE context to the configured AI provider.</label><button>Generate AI suggestion</button></form>{suggestion_html}</section>
 <section><h2>DAILY EXECUTIVE REVIEW</h2><p>Latest: {e(latest.get('review_date','Not recorded'))} · Priority: {e(latest.get('priority','—') or '—')}</p>
 <p>Wins: {e(latest.get('wins','—') or '—')} · Tomorrow: {e(latest.get('tomorrow','—') or '—')}</p>
 <form method='post' action='/review'><input name='priority' placeholder="Today's priority"><input name='wins' placeholder='Wins'><input name='blockers' placeholder='Blockers'><input name='tomorrow' placeholder="Tomorrow's first move"><button>Save review</button></form></section>
@@ -175,7 +179,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -188,7 +192,16 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
             data = {key: values[0] for key, values in form.items()}
             try:
                 path = urlparse(self.path).path
-                if path == "/add-project":
+                suggestion = ""
+                if path == "/suggest":
+                    if data.get("send_context") != "on":
+                        raise ValueError("Explicit context approval is required.")
+                    from .ai import AIConfig, generate_suggestion
+                    suggestion = generate_suggestion(
+                        store, data.get("goal", ""), AIConfig.from_env()
+                    )
+                    notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/add-project":
                     venture_id = int(data["venture_id"]) if data.get("venture_id") else None
                     store.add_project(data.get("name", ""), data.get("description", ""), venture_id)
                     notice = "Project created."
@@ -255,8 +268,8 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 else:
                     store.resolve_blocker(int(data["id"]))
                     notice = "Blocker resolved."
-                self._send(200, _page(store, notice))
-            except (ValueError, KeyError) as error:
+                self._send(200, _page(store, notice, suggestion))
+            except (ValueError, KeyError, RuntimeError, OSError) as error:
                 self._send(400, _page(store, f"Could not save: {error}"))
 
         def log_message(self, format: str, *args: object) -> None:
