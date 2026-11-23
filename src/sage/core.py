@@ -1435,7 +1435,7 @@ class SageStore:
         if target.exists() and not overwrite:
             raise ValueError(f"Export already exists: {target} (use --force to replace it).")
         target.parent.mkdir(parents=True, exist_ok=True)
-        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals")
+        tables = ("ventures", "projects", "tasks", "daily_reviews", "decisions", "blockers", "resource_entries", "income_entries", "recurring_tasks", "task_proposals", "financial_obligations")
         with self._connect() as connection:
             payload = {
                 "format": "sage-export",
