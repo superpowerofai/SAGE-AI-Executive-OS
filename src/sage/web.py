@@ -18,6 +18,7 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
     obligations = store.list_obligations()
     recurring_obligations = store.list_recurring_obligations()
     cash_positions = store.list_cash_positions()
+    context_notes = store.list_context_notes()
     tasks = store.list_tasks()
     blockers = store.list_blockers("open")
     reviews = store.list_reviews(1)
@@ -61,6 +62,12 @@ def _page(store: SageStore, notice: str = "", suggestion: str = "") -> str:
         f"<select name='status'><option>active</option><option>paused</option><option>completed</option></select>"
         f"<button>Update</button></form></td></tr>" for rule in recurring_obligations
     ) or "<tr><td colspan='9'>No recurring financial rules.</td></tr>"
+    context_note_rows = "".join(
+        f"<tr><td>#{note['id']}</td><td>{e(note['category'])}</td><td>{e(note['title'])}</td>"
+        f"<td>P{note['importance']}</td><td>{e(note['content'])}</td><td>"
+        f"<form method='post' action='/archive-note'><input type='hidden' name='id' value='{note['id']}'>"
+        f"<button class='secondary'>Archive</button></form></td></tr>" for note in context_notes
+    ) or "<tr><td colspan='6'>No active context notes.</td></tr>"
     obligation_rows = "".join(
         f"<tr><td>#{o['id']}</td><td>{e(o['venture_name'])}</td><td>{e(o['obligation_type'])}</td>"
         f"<td>INR {o['amount']:,.2f}</td><td>{e(o['due_date'])}</td><td>{e(o['description'])}</td>"
@@ -153,6 +160,9 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;text-align:left;b
 <div class='card'><div class='muted'>Paused projects</div><div class='big'>{sum(p['status'] == 'paused' for p in projects)}</div></div>
 </div>
 <section><h2>MASTER FOCUS</h2><div class='big'>{focus}</div><p>One next action from active projects.</p></section>
+<section><h2>SAGE CONTEXT NOTES</h2><p>Store durable operating preferences, constraints and business context for the local AI advisor. Do not store passwords, bank account numbers or other secrets.</p>
+<div class='scroll'><table><tr><th>ID</th><th>Category</th><th>Title</th><th>Importance</th><th>Content</th><th>Action</th></tr>{context_note_rows}</table></div>
+<form method='post' action='/add-note'><input name='category' placeholder='Category (e.g. preferences, strategy)' value='general'><input name='title' placeholder='Short note title' required><textarea name='content' placeholder='Durable context for SAGE' required></textarea><select name='importance'><option value='1'>P1 · Critical</option><option value='2'>P2 · High</option><option value='3' selected>P3 · Normal</option><option value='4'>P4 · Low</option><option value='5'>P5 · Reference</option></select><button>Save context note</button></form></section>
 <section><h2>RECURRING FINANCIAL OBLIGATIONS</h2><p>Rules generate future receivables/payables for review; they never pay or collect automatically.</p>
 <div class='scroll'><table><tr><th>ID</th><th>Venture</th><th>Type</th><th>Amount</th><th>Description</th><th>Frequency</th><th>Next due</th><th>Status</th><th>Change status</th></tr>{recurring_obligation_rows}</table></div>
 <form method='post' action='/add-recurring-obligation'><select name='venture_id' required><option value=''>Choose venture</option>{''.join(f"<option value='{v['id']}'>{e(v['name'])}</option>" for v in ventures)}</select><select name='obligation_type'><option value='payable'>Recurring cost / payable</option><option value='receivable'>Recurring income / receivable</option></select><input name='amount' type='number' min='0.01' step='0.01' placeholder='Amount INR' required><input name='description' placeholder='Rent, retainer, payroll...' required><select name='frequency'><option>daily</option><option>weekly</option><option selected>monthly</option></select><input name='every' type='number' min='1' max='365' value='1'><input name='start_date' type='date'><button>Add recurring financial rule</button></form>
@@ -247,7 +257,7 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                 return
             if urlparse(self.path).path not in {
                 "/add-project", "/add-venture", "/assign-project", "/log-resource", "/add-task",
-                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/set-cash-position", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
+                "/task-status", "/project-status", "/edit-project", "/edit-task", "/suggest", "/add-note", "/archive-note", "/set-cash-position", "/add-obligation", "/settle-obligation", "/cancel-obligation", "/add-recurring-obligation", "/recurring-obligation-status", "/generate-recurring-obligations", "/propose-task", "/approve-proposal", "/reject-proposal", "/add-recurring", "/recurring-status", "/generate-recurring", "/review", "/add-blocker",
                 "/resolve-blocker", "/decision",
             }:
                 self._send(404, "Not found")
@@ -269,6 +279,15 @@ def serve(store: SageStore, host: str = "127.0.0.1", port: int = 8765) -> None:
                         store, data.get("goal", ""), AIConfig.from_env()
                     )
                     notice = "AI suggestion generated. No SAGE records were changed."
+                elif path == "/add-note":
+                    store.add_context_note(
+                        data.get("title", ""), data.get("content", ""),
+                        data.get("category", "general"), int(data.get("importance", "3")),
+                    )
+                    notice = "SAGE context note saved."
+                elif path == "/archive-note":
+                    store.archive_context_note(int(data["id"]))
+                    notice = "SAGE context note archived."
                 elif path == "/set-cash-position":
                     store.set_cash_position(
                         int(data["venture_id"]), float(data.get("opening_balance", "0")),
