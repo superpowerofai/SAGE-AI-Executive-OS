@@ -32,6 +32,7 @@ SAGE v0.1 provides a Python command-line interface and a localhost web cockpit b
 - Create an integrity-checked SQLite backup without interrupting normal reads.
 - Restore a verified SQLite backup only with explicit confirmation; the current database is preserved as a pre-restore safety copy.
 - Export all stored records (ventures, projects, tasks, daily reviews, decisions, blockers, resource entries, income entries and recurring task rules) to versioned UTF-8 JSON, and import compatible exports atomically into an empty database.
+- Store durable local context notes (preferences, constraints and operating rules) that are included in AI context previews.
 - Preview the exact bounded business context prepared for AI; external transmission requires explicit `--send-context` approval in the CLI or an approval checkbox in the local cockpit.
 - Request advisory AI suggestions from local or remote OpenAI-compatible chat-completion endpoints; SAGE never lets the model mutate records.
 
@@ -104,6 +105,8 @@ sage generate-recurring-obligations
 sage obligations --status open
 sage set-cash-position 1 50000 2026-11-23 --note "Verified opening cash"
 sage cash-positions
+sage add-note "Operating rule" "Evidence first; one clear next action." --category preferences --importance 1
+sage notes
 sage settle-obligation 1
 sage log-time 1 2.5 --note "Build automation"
 sage resources --venture-id 1
@@ -147,7 +150,7 @@ $env:SAGE_AI_BASE_URL = "http://127.0.0.1:11434/v1"
 $env:SAGE_AI_MODEL = "your-local-model"
 ```
 
-For a remote provider, use its HTTPS base URL and set `SAGE_AI_API_KEY` in the environment. Do not put secrets in source files or commit them.
+For a remote provider, use its HTTPS base URL and set `SAGE_AI_API_KEY` in the environment. Do not store passwords, account numbers or highly sensitive secrets in SAGE notes. Do not put API secrets in source files or commit them.
 
 Preview the context first, then explicitly approve transmission:
 
