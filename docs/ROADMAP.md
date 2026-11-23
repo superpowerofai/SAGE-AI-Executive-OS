@@ -28,9 +28,9 @@ This roadmap distinguishes implemented code from behavior that has actually been
 ## v0.3 — Executive review
 
 - [x] Daily review record and recent review history (CI-verified on Python 3.10, 3.11 and 3.12)
-- [x] 7-day and 30-day review summaries (implemented; awaiting fresh CI run)
-- [x] Structured blocker tracking with project/task links and resolution state (awaiting fresh CI run)
-- [x] Decision journal with context, choice, rationale and revisit date (awaiting fresh CI run)
+- [x] 7-day and 30-day review summaries (CI-verified on Python 3.10, 3.11 and 3.12)
+- [x] Structured blocker tracking with project/task links and resolution state (CI-verified on Python 3.10, 3.11 and 3.12)
+- [x] Decision journal with context, choice, rationale and revisit date (CI-verified on Python 3.10, 3.11 and 3.12)
 
 ## v0.4 — Optional AI assistance
 
