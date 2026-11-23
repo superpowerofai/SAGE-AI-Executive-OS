@@ -21,7 +21,7 @@ This roadmap distinguishes implemented code from behavior that has actually been
 - [x] 7-day and 30-day execution plan with overdue, upcoming and unscheduled work
 - [ ] Edit and archive workflows
 - [ ] Full financial ledger (income, recurring costs, cash flow), resource allocation recommendations and evidence-based prioritization
-- [x] Integrity-checked SQLite backup and versioned JSON export (CI-verified)
+- [x] Integrity-checked SQLite backup, versioned JSON export and confirmed restore with pre-restore safety copy (CI-verified)
 - [x] Venture portfolio registry, project ownership, strategic priority and optional resource caps (CI-verified)
 - [x] Actual expense and time logging with monthly/weekly cap usage summaries (CI-verified)
 
