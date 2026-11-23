@@ -350,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"{venture['week_hours_used']:g} hours logged this week; "
                     f"{budget_left}; {hours_left}"
                 )
+                print(f"  Allocation signal — {venture['allocation_signal']}")
         elif args.command in {"log-expense", "log-time"}:
             kind = "expense" if args.command == "log-expense" else "time"
             quantity = args.amount if kind == "expense" else args.hours
