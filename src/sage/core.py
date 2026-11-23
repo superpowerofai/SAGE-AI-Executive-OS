@@ -498,9 +498,25 @@ class SageStore:
                 hours_remaining = hours_cap - week_hours if hours_cap is not None else None
                 missing_caps = []
                 if budget_cap is None:
-                    missing_caps.append("monthly budget")
+                    missing_caps.append("monthly budget cap")
                 if hours_cap is None:
-                    missing_caps.append("weekly hours")
+                    missing_caps.append("weekly hours cap")
+                allocation_data_gaps = list(missing_caps)
+                if cash_balance is None:
+                    allocation_data_gaps.append("verified cash position")
+                allocation_blockers = []
+                if venture["status"] != "active":
+                    allocation_blockers.append("venture is not active")
+                if (budget_remaining is not None and budget_remaining < 0) or (
+                    hours_remaining is not None and hours_remaining < 0
+                ):
+                    allocation_blockers.append("recorded resource cap exceeded")
+                if forecast_cash_balance is not None and forecast_cash_balance < 0:
+                    allocation_blockers.append("recorded 30-day cash forecast is negative")
+                if overdue_payables > 0:
+                    allocation_blockers.append("open payables are overdue")
+                if active_projects == 0:
+                    allocation_blockers.append("no active projects")
                 if venture["status"] != "active":
                     signal = "Inactive venture: exclude from new resource allocation."
                 elif (budget_remaining is not None and budget_remaining < 0) or (
@@ -545,6 +561,14 @@ class SageStore:
                     "week_hours_used": week_hours,
                     "week_hours_remaining": hours_remaining,
                     "allocation_signal": signal,
+                    "allocation_readiness": (
+                        "inactive" if venture["status"] != "active"
+                        else "hold" if allocation_blockers
+                        else "needs_data" if allocation_data_gaps
+                        else "ready_for_review"
+                    ),
+                    "allocation_blockers": allocation_blockers,
+                    "allocation_data_gaps": allocation_data_gaps,
                 })
             unassigned = connection.execute(
                 "SELECT COUNT(*) FROM projects WHERE venture_id IS NULL"
