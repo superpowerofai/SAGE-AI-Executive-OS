@@ -137,6 +137,7 @@ def test_json_import_supports_legacy_v1_exports(tmp_path):
     payload["version"] = 1
     payload["data"].pop("ventures")
     payload["data"].pop("resource_entries")
+    payload["data"].pop("income_entries")
     export_path.write_text(json.dumps(payload), encoding="utf-8")
 
     restored = SageStore(tmp_path / "legacy-target.db")
